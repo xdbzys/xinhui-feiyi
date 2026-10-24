@@ -172,8 +172,8 @@
     const id = ++companionState.seq;
     showCompanion(hint.say, hint.action);
 
-    // AI 只负责把提醒说得更贴合此刻；限流，失败就用本地话术
-    if (window.XHFYAI && window.XHFYAI.getKey() && now - companionState.lastAiAt > 60000) {
+    // AI 只负责把提醒说得更贴合此刻；限流到 3 分钟一次，失败就用本地话术
+    if (window.XHFYAI && window.XHFYAI.getKey() && now - companionState.lastAiAt > 180000) {
       companionState.lastAiAt = now;
       clearTimeout(companionState.aiTimer);
       companionState.aiTimer = setTimeout(async () => {
@@ -735,10 +735,10 @@
     const meta = window.XHFYCraft.META[style];
     loader.hidden = false;
     setCraftView("ai");
-    loaderText.textContent = "AI 正在读构图与元素…";
 
     try {
-      const bp = await window.XHFYAI.craftBlueprint(state.analysis, state.report, style);
+      // 蓝图现在是本地同步构建（不消耗 AI token），直接进入重绘
+      const bp = window.XHFYAI.craftBlueprint(state.analysis, state.report, style);
       state.aiBlueprint = bp;
       loaderText.textContent = "AI 正在重绘" + meta.short + "纹样…";
       const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report);

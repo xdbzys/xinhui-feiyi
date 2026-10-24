@@ -366,9 +366,28 @@
     return out.join("\n");
   }
 
+  /**
+   * 精简版知识库：供 report() 使用。
+   * 去掉调节方法的完整步骤（步骤由本地渲染，AI 只需选 id），
+   * 并把每条规则压缩为「特征→含义」的短句，显著降低输入 token。
+   */
+  function buildKnowledgeBlockCompact() {
+    const out = ["【知识库边界（仅组织语言，不得编造）】"];
+    out.push("空间：偏上=想象/向上；偏下=安全感/扎根；偏左=内省/过去；偏右=未来/行动；居中=平衡；偏小=克制/低能量；偏大=外放/张力；贴边=被挤压/求边界");
+    out.push("线条：长连贯=控制/压抑；短断续=冲动/敏感；水平=保护/无力；垂直=自信/向上；刚硬=防御；曲线=灵活；反复涂抹=冲突/在意；轻淡=不确定；浓重=焦虑/用力；快=释放张力");
+    out.push("色彩：朱红=热情/张力；落日橙=活力/温暖；黄=明快/希望；苔绿=生长/疗愈；湖蓝=安静/沉思；靛蓝=内省/克制；紫黛=敏感/想象；赭石=踏实/土地；墨黑=边界/防御；月白=留白/清理；雾灰=过渡/模糊");
+    out.push("元素：树=自我力量；山=目标/压力；水=情绪流动；屋=自我/家庭；太阳=希望/能量；云雾=不确定/保护；路=选择/方向；窗=连接方式；星月=理想/孤独；花草=生命力");
+    out.push("留白：大面积=未言说/独处；充盈=表达欲/紧绷；下方空=脱离现实；上方空=务实/少想象");
+    out.push("EAT：创作过程即调节；材料是情绪容器；先动觉感官再谈意义；重复动作锚定注意力；允许模糊");
+    out.push("调节方法（只选 id，步骤由系统提供）：" +
+      regulations.map((r) => r.id + "=" + r.name + "[" + r.tag + "]").join("；"));
+    out.push("边界：不诊断不用临床标签；用可能/也许/像是；引用具体颜色线条位置元素或过程；给自我觉察+小行动；不编疗法；危机表达引导专业帮助");
+    return out.join("\n");
+  }
+
   window.XHFYKnowledge = {
     spatial, lines, colors, elements, space, eatPrinciples, craftPrinciples,
     regulations, behaviorRules, boundaries,
-    recommendRegulation, buildKnowledgeBlock
+    recommendRegulation, buildKnowledgeBlock, buildKnowledgeBlockCompact
   };
 })();
