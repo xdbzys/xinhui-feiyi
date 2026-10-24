@@ -58,6 +58,7 @@
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout || 60000);
     let res;
+    let url = "";
     try {
       // 纯静态部署下，浏览器直接跨域调用智谱 API。
       // Authorization 头会触发 CORS 预检（智谱预检不返回 CORS 头），
@@ -65,7 +66,7 @@
       const full = AI.base + path + (path.indexOf("?") >= 0 ? "&" : "?") +
         "Authorization=" + encodeURIComponent("Bearer " + key);
       const relay = (AI.relay || "").trim();
-      const url = relay ? relay.replace("{url}", encodeURIComponent(full)) : full;
+      url = relay ? relay.replace("{url}", encodeURIComponent(full)) : full;
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,7 +76,8 @@
     } catch (e) {
       clearTimeout(timer);
       if (e && e.name === "AbortError") throw new Error("AI 响应超时");
-      throw new Error("网络连接失败，请检查网络后重试");
+      console.warn("[心绘非遗] AI 请求失败", e && e.name, e && e.message, url.slice(0, 120));
+      throw new Error("网络连接失败：请确认已运行 node tools/relay.mjs，并允许浏览器访问本地网络");
     }
     clearTimeout(timer);
     let data = null;
@@ -107,6 +109,20 @@
     return content;
   }
 
+  function describeProcess(a) {
+    const p = a.process || {};
+    const b = a.behavior || {};
+    if (!p.strokes && !p.activeSec) return "过程数据：暂无（用户落笔很少）";
+    return [
+      "作画时长：" + Math.round(p.activeSec || 0) + " 秒（实际落笔）",
+      "笔触数量：" + (p.strokes || 0) + " 笔，笔速" + (p.speedLabel || "适中"),
+      "使用颜色：" + (p.distinctColors || 0) + " 种，换色 " + (p.colorSwitches || 0) + " 次",
+      "停顿：" + (p.pauses || 0) + " 次，最长 " + Math.round(p.longestPauseSec || 0) + " 秒",
+      "撤销 / 重做 / 橡皮 / 清空：" + (p.undo || 0) + " / " + (p.redo || 0) + " / " + (p.eraser || 0) + " / " + (p.clear || 0),
+      "过程标签：" + ((b.tags || []).join("、") || "无明显特征")
+    ].join("\n");
+  }
+
   function describeAnalysis(a) {
     const s = a.scores;
     const htp = a.htp || {};
@@ -127,12 +143,14 @@
     ].join("\n");
   }
 
-  async function vision(imageBase64, userText) {
+  async function vision(imageBase64, userText, analysis) {
     const prompt = [
       "你是一位受过艺术治疗训练的观察者。用户凭记忆画下了「闭上眼睛觉得最舒服的地方」，并可能留下一句话。",
       "请只观察画面本身，用温和、具体、克制的语言描述，不做心理诊断，不评价画得好坏。",
       "可参考的知识库边界（只在该框架内组织语言，不得编造未列出的结论）：",
       window.XHFYKnowledge.buildKnowledgeBlock(),
+      "",
+      analysis ? "【作画过程数据（用于辅助理解，不要直接复述数字）】\n" + describeProcess(analysis) : "",
       "",
       "用户自述：" + (userText || "（未填写）"),
       "严格输出 JSON（不要 markdown，不要额外解释），字段如下：",
@@ -182,6 +200,9 @@
       "【量化视觉分析（0-100）】",
       describeAnalysis(analysis),
       "",
+      "【作画过程数据】",
+      describeProcess(analysis),
+      "",
       "【视觉模型观察】",
       "场景：" + (v.scene || "未提供"),
       "元素：" + ((v.elements || []).join("、") || "未提供"),
@@ -206,6 +227,13 @@
         space: "60-100字解读空间、重心与留白",
         strength: "30-60字，指出画面里的一处资源或力量",
         whisper: "20-40字，一句温柔提醒",
+        process: "70-110字「过程印记」：必须引用作画时长、停顿、撤销、换色中的至少两项，说明你是怎么画的，以及这种画法可能意味着什么",
+        mood: "40-70字「当下心情」：结合画面与过程，用「也许」「像是」描述此刻可能的心情，不做诊断",
+        regulation: {
+          id: "从下列调节方法 ID 中选最贴合的一个：" +
+            window.XHFYKnowledge.regulations.map((r) => r.id + "=" + r.name).join("、"),
+          why: "30-50字，结合画面与过程，说明为什么此刻适合这个方法"
+        },
         craft: {
           style: "从 papercut / tiedye / calico / bamboo 中选一个最贴合画面的",
           reason: "30-60字为什么选它",
@@ -236,21 +264,118 @@
     return parsed;
   }
 
+  /* ---------------- 实时陪伴引导 ---------------- */
+
+  async function companion(stats, context) {
+    const s = stats || {};
+    const prompt = [
+      "你是心绘非遗画布旁边的一位温和的陪伴者。用户正在凭记忆画「让自己觉得舒服的地方」。",
+      "请根据下面的实时作画数据，给出一句很短的提醒，帮助画面更丰富、更舒服，或帮助用户放松。",
+      "要求：",
+      "1) 不超过 22 个字，像朋友在耳边说的一句话；",
+      "2) 具体、可执行，比如「加一点苔绿」或「画一朵云陪它」；",
+      "3) 不评价画得好坏，不说「你应该」，不做任何心理诊断；",
+      "4) 如果用户正在犹豫或停顿，先允许，再建议。",
+      "",
+      "实时数据：已画 " + (s.elapsed || 0) + " 秒，落笔 " + (s.strokes || 0) + " 笔，" +
+        "使用 " + (s.distinctColors || 0) + " 种颜色，换色 " + (s.colorSwitches || 0) + " 次，" +
+        "停顿 " + (s.pauses || 0) + " 次，撤销 " + (s.undos || 0) + " 次，覆盖约 " +
+        Math.round((s.coverage || 0) * 100) + "%，画面尺寸 " + (s.bboxW || 0) + "×" + (s.bboxH || 0),
+      "触发原因：" + (context || "画面还比较空"),
+      "",
+      '严格输出 JSON：{"say":"一句不超过22字的温柔提醒","action":"一个不超过12字的具体动作","kind":"color|space|detail|pause|encourage"}'
+    ].join("\n");
+
+    const content = await chat([
+      { role: "system", content: "你只输出合法 JSON，用中文，不要 markdown。" },
+      { role: "user", content: prompt }
+    ], { model: AI.textModel, temperature: 0.9, maxTokens: 160, json: true, timeout: 15000 });
+
+    const parsed = extractJSON(content);
+    if (!parsed || !parsed.say) throw new Error("陪伴引导格式异常");
+    return {
+      say: String(parsed.say).slice(0, 30),
+      action: String(parsed.action || "").slice(0, 16),
+      kind: parsed.kind || "encourage"
+    };
+  }
+
+  /* ---------------- 非遗 AI 二创 ---------------- */
+
   const STYLE_PROMPTS = {
-    papercut: "中国非物质文化遗产剪纸艺术，纯正红纸镂空，传统锯齿纹与云纹收边，平面装饰艺术，对称构图，白色米色背景",
-    tiedye: "中国非物质文化遗产扎染艺术，靛蓝色棉布，同心晕圈与自然冰裂纹，手工扎结的不可复制肌理，平面俯拍",
-    calico: "中国非物质文化遗产蓝印花布，靛蓝底白色纹样，传统刻版防染，细密冰裂纹，平面装饰艺术",
-    bamboo: "中国非物质文化遗产竹编艺术，竹篾经纬交织，一压一挑的编织肌理，暖竹色，平面装饰艺术"
+    papercut: "中国非物质文化遗产剪纸艺术，纯正红纸镂空剪影，传统锯齿纹、云纹、团花与角花收边，平面装饰艺术，宣纸质感，米白或纯白背景，构图对称而留呼吸，刀路清晰，无文字",
+    tiedye: "中国非物质文化遗产扎染艺术，靛蓝染布，同心晕圈与自然冰裂纹，手工扎结形成的防染留白，布料纤维肌理可见，平面俯拍，构图不对称，无文字",
+    calico: "中国非物质文化遗产蓝印花布艺术，靛蓝底白色纹样，传统刻版防染，细密冰裂纹，白花完整清晰，平面装饰艺术，棉布肌理，无文字",
+    bamboo: "中国非物质文化遗产竹编艺术，竹篾经纬交织，一压一挑的编织肌理，暖竹色与深浅竹篾交错，收边整齐，平面装饰艺术，无文字"
   };
 
-  async function craftImage(style, elements, colors) {
+  /** 让文本模型把「用户原画 + 工艺」翻译成一张可控的重绘蓝图 */
+  async function craftBlueprint(analysis, report, style) {
+    const v = (report && report.vision) || {};
+    const htp = analysis.htp || {};
+    const elements = (v.elements && v.elements.length)
+      ? v.elements
+      : ((analysis.dominantColors || []).map((c) => c.name).slice(0, 3));
+    const colors = (analysis.dominantColors || []).map((c) => c.name + "(" + c.hex + ")");
+    const prompt = [
+      "你是非遗纹样设计师。用户画了一幅很朴素的心象画，现在要把它二创成非遗工艺作品。",
+      "关键：不是复制原图，而是在保留原画「构图、主体位置、元素关系、情绪气质」的前提下，把它重绘为细节丰富、纹样完整、符合传统工艺语法的作品。",
+      "",
+      "【原画信息】",
+      "画面场景：" + (v.scene || "未提供"),
+      "元素：" + (elements.join("、") || "抽象心象"),
+      "线条：" + (v.lineQuality || analysis.lineStyle),
+      "氛围：" + (v.mood || analysis.colorStyle),
+      "主色：" + (colors.join("、") || "朱砂红、米白"),
+      "构图：主体" + htp.horizBias + "、" + htp.vertBias + "，" + htp.sizeBias,
+      "图鉴意象：" + ((report && (report.archetype || report.title)) || "心里的那片岸"),
+      "用户自述：" + ((analysis.userText || "").slice(0, 120) || "未填写"),
+      "",
+      "【目标工艺】" + style + "：" + (STYLE_PROMPTS[style] || STYLE_PROMPTS.papercut),
+      "",
+      "严格输出 JSON（不要 markdown）：",
+      JSON.stringify({
+        title: "6-10字作品名",
+        composition: "30-50字，说明主体在画面中的位置、大小与留白，必须沿用原画构图",
+        motifs: ["3-6个要加入的传统纹样元素"],
+        palette: ["2-4个颜色，如 朱砂红、米白"],
+        prompt: "120-200字，可直接用于图像生成模型的中文提示词：写明非遗工艺、原画主体与构图、传统纹样细节、配色、背景、质感、正方形、无文字"
+      })
+    ].join("\n");
+
+    const content = await chat([
+      { role: "system", content: "你只输出合法 JSON，用中文书写。" },
+      { role: "user", content: prompt }
+    ], { model: AI.textModel, temperature: 0.7, maxTokens: 900, json: true, timeout: 45000 });
+
+    const parsed = extractJSON(content);
+    if (!parsed) throw new Error("二创蓝图生成失败");
+    return {
+      title: parsed.title || "心象纹样",
+      composition: parsed.composition || "",
+      motifs: Array.isArray(parsed.motifs) ? parsed.motifs.slice(0, 6) : [],
+      palette: Array.isArray(parsed.palette) ? parsed.palette.slice(0, 4) : [],
+      prompt: parsed.prompt || "",
+      style
+    };
+  }
+
+  /** 按蓝图调用图像模型，生成非遗二创底图 */
+  async function craftRedraw(style, blueprint, analysis, report) {
+    const bp = blueprint || {};
     const styleText = STYLE_PROMPTS[style] || STYLE_PROMPTS.papercut;
+    const htp = analysis.htp || {};
+    const elements = ((report && report.vision && report.vision.elements) || []).join("、");
     const prompt = [
       styleText,
-      "画面元素：" + ((elements || []).join("、") || "抽象的心象山水"),
-      "主色：" + ((colors || []).join("、") || "朱砂红、米白"),
-      "将元素转化为非遗纹样，保留可辨识的轮廓，正方形构图，高清，细腻，无文字，无边框文字，适合作为手工底稿"
-    ].join("。");
+      bp.prompt || "",
+      bp.composition ? "构图要求：" + bp.composition : "",
+      "沿用原画的主体位置（" + htp.horizBias + "·" + htp.vertBias + "）与留白比例，不要添加原画里没有的人物",
+      elements ? "原画元素：" + elements : "",
+      (bp.motifs && bp.motifs.length) ? "加入传统纹样：" + bp.motifs.join("、") : "",
+      (bp.palette && bp.palette.length) ? "配色：" + bp.palette.join("、") : "",
+      "正方形构图，1:1，高清，细节丰富，边缘干净，平面装饰艺术，无文字，无水印，无相框，适合作为剪纸 / 印染底稿"
+    ].filter(Boolean).join("。");
 
     const data = await call("/images/generations", {
       model: AI.imageModel,
@@ -261,6 +386,48 @@
     const url = data && data.data && data.data[0] && data.data[0].url;
     if (!url) throw new Error("图像模型未返回图片");
     return url;
+  }
+
+  /** 兼容旧接口：直接按元素生成一张灵感稿 */
+  async function craftImage(style, elements, colors) {
+    const data = await call("/images/generations", {
+      model: AI.imageModel,
+      prompt: [
+        STYLE_PROMPTS[style] || STYLE_PROMPTS.papercut,
+        "画面元素：" + ((elements || []).join("、") || "抽象的心象山水"),
+        "主色：" + ((colors || []).join("、") || "朱砂红、米白"),
+        "正方形构图，高清，无文字，适合作为手工底稿"
+      ].join("。"),
+      size: "1024x1024"
+    }, 90000);
+    const url = data && data.data && data.data[0] && data.data[0].url;
+    if (!url) throw new Error("图像模型未返回图片");
+    return url;
+  }
+
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("图片读取失败"));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /** 把图像 URL 取回为 dataURL：CogView 图片不带 CORS 头，需经本地中继转发 */
+  async function imageToDataURL(url) {
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      if (res.ok) return await blobToDataURL(await res.blob());
+    } catch (e) {}
+    const relay = (AI.relay || "").trim();
+    if (relay) {
+      try {
+        const res = await fetch(relay.replace("{url}", encodeURIComponent(url)), { method: "GET" });
+        if (res.ok) return await blobToDataURL(await res.blob());
+      } catch (e) {}
+    }
+    throw new Error("图片受跨域限制，请启动本地中继后再生成二创稿");
   }
 
   async function test() {
@@ -276,7 +443,12 @@
     hasCustomKey,
     vision,
     report,
+    companion,
+    craftBlueprint,
+    craftRedraw,
     craftImage,
+    imageToDataURL,
+    describeProcess,
     test,
     extractJSON,
     defaultKeyAvailable: !!DEFAULT_KEY

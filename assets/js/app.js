@@ -14,10 +14,18 @@
     vision: null,
     report: null,
     craftStyle: "papercut",
+    craftView: "local",
     craftEl: null,
     craftURL: "",
     reportPatternURL: "",
     aiImageURL: "",
+    aiBaseImg: null,
+    aiBaseStyle: "",
+    aiBlueprint: null,
+    aiComposedEl: null,
+    aiComposedURL: "",
+    regulations: [],
+    regulationIndex: 0,
     busy: false
   };
 
@@ -74,6 +82,133 @@
     $$(".reveal").forEach((el) => io.observe(el));
   }
 
+  /* ---------------- AI 实时陪伴 ---------------- */
+
+  const companionState = { lastLocalAt: 0, lastAiAt: 0, seq: 0, hideTimer: 0, aiTimer: 0, lastSay: "" };
+
+  const FALLBACK_HINTS = [
+    { kind: "color", context: "画面颜色比较单一", say: "试试苔绿、落日橘或湖蓝，让画面多一点体温。", action: "换一种颜色" },
+    { kind: "detail", context: "画面还比较空", say: "画一阵风、一朵云，或者一条小路来陪它。", action: "补一个元素" },
+    { kind: "space", context: "主体偏小", say: "把最重要的那块画大一点，它会更有安全感。", action: "画大一点" },
+    { kind: "pause", context: "用户停顿较久", say: "停在这里也可以，先呼吸三次，再落下一笔。", action: "先呼吸" },
+    { kind: "encourage", context: "用户持续投入", say: "不用画得像，你已经把此刻放进去了。", action: "继续画" }
+  ];
+
+  /** 依据实时作画数据挑选一个温柔提醒；只做确定性规则判断 */
+  function companionTrigger(s) {
+    const changes = (s.undos || 0) + (s.erasers || 0) + (s.clears || 0);
+    if (!s.strokes) {
+      if (s.elapsed >= 16 && s.idle >= 6) {
+        return { kind: "start", context: "用户还没有落笔", say: "不知道从哪开始？先画一条地平线就好。", action: "画一条线" };
+      }
+      return null;
+    }
+    if (s.pauses >= 2 && s.idle >= 6) {
+      return { kind: "pause", context: "用户多次停顿，可能正在斟酌", say: "停一下也没关系，先看看已经画下的部分。", action: "退后看一眼" };
+    }
+    if (changes >= 3 && s.strokes >= 3) {
+      return { kind: "pause", context: "用户反复撤销或擦除", say: "改过的痕迹也算数，不用画得完美。", action: "先不改了" };
+    }
+    if (s.distinctColors <= 1 && s.strokes >= 3) {
+      return { kind: "color", context: "画面只使用了一种颜色", say: "只用一种颜色也没关系，试试加一点苔绿或落日橘。", action: "加一点颜色" };
+    }
+    if (s.coverage < 0.03 && s.strokes >= 2) {
+      return { kind: "detail", context: "画面覆盖很少，显得空", say: "画面还空着，画一阵风或一朵云陪它吧。", action: "补一朵云" };
+    }
+    if (s.bboxW < 150 && s.bboxH < 110 && s.strokes >= 3) {
+      return { kind: "space", context: "主体占画面比例偏小", say: "把最重要的那块画大一点，它会更有安全感。", action: "画大一点" };
+    }
+    if (s.coverage > 0.5) {
+      return { kind: "space", context: "画面填得很满", say: "画面已经很满了，留一点白给自己呼吸。", action: "留一点白" };
+    }
+    if (s.elapsed >= 100 && s.strokes >= 8) {
+      return { kind: "encourage", context: "用户持续投入作画", say: "你在这块地方待了很久，它一定很重要。", action: "继续待着" };
+    }
+    if (s.idle >= 24) {
+      return { kind: "detail", context: "用户停笔较久，画面可能缺少元素", say: "要不要给它添一盏灯，或一个太阳？", action: "添一盏灯" };
+    }
+    return null;
+  }
+
+  function hideCompanion() {
+    const el = $("#companion");
+    if (!el || el.hidden) return;
+    el.classList.remove("show");
+    setTimeout(() => {
+      if (!el.classList.contains("show")) el.hidden = true;
+    }, 420);
+  }
+
+  function showCompanion(say, action) {
+    const el = $("#companion");
+    if (!el) return;
+    $("#companionSay").textContent = action ? say + " · " + action : say;
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add("show"));
+    clearTimeout(companionState.hideTimer);
+    companionState.hideTimer = setTimeout(hideCompanion, 22000);
+  }
+
+  function maybeCompanion(force) {
+    if (!studio || state.busy) return;
+    const stats = studio.liveStats();
+    if (stats.drawing && !force) return;
+    const now = Date.now();
+    if (!force && now - companionState.lastLocalAt < 18000) return;
+    if (!force && stats.idle < 4) return;
+
+    let hint = companionTrigger(stats);
+    if (force) {
+      // 用户主动「换个提醒」时，避开刚刚说过的那一句
+      if (!hint || hint.say === companionState.lastSay) {
+        const pool = FALLBACK_HINTS.filter((h) => h.say !== companionState.lastSay);
+        hint = pool[Math.floor(Math.random() * pool.length)] || hint;
+      }
+    }
+    if (!hint) return;
+
+    companionState.lastLocalAt = now;
+    companionState.lastSay = hint.say;
+    const id = ++companionState.seq;
+    showCompanion(hint.say, hint.action);
+
+    // AI 只负责把提醒说得更贴合此刻；限流，失败就用本地话术
+    if (window.XHFYAI && window.XHFYAI.getKey() && now - companionState.lastAiAt > 60000) {
+      companionState.lastAiAt = now;
+      clearTimeout(companionState.aiTimer);
+      companionState.aiTimer = setTimeout(async () => {
+        try {
+          const r = await window.XHFYAI.companion(stats, hint.context);
+          if (id === companionState.seq && !$("#companion").hidden) {
+            showCompanion(r.say, r.action);
+          }
+        } catch (e) {}
+      }, 500);
+    }
+  }
+
+  function initCompanion() {
+    const close = $("#companionClose");
+    const more = $("#companionMore");
+    if (close) close.addEventListener("click", hideCompanion);
+    if (more) {
+      more.addEventListener("click", () => {
+        companionState.lastLocalAt = 0;
+        companionState.seq++;
+        maybeCompanion(true);
+      });
+    }
+    const wrap = $("#canvasWrap");
+    if (wrap) {
+      wrap.addEventListener("pointerdown", (e) => {
+        // 点气泡内的按钮不应触发「落笔即收起」
+        if (e.target.closest && e.target.closest(".companion")) return;
+        if (!$("#companion").hidden) setTimeout(hideCompanion, 1600);
+      });
+    }
+    setInterval(() => maybeCompanion(false), 4000);
+  }
+
   /* ---------------- 画笔 ---------------- */
 
   function initPaint() {
@@ -84,6 +219,12 @@
         $("#undoBtn").disabled = s.strokes.length === 0;
         $("#redoBtn").disabled = !s.canRedo();
         if (!s.strokes.length) $("#canvasEmpty").classList.remove("hide");
+      },
+      onStrokeEnd: () => {
+        setTimeout(() => maybeCompanion(false), 1200);
+      },
+      onColorChange: () => {
+        setTimeout(() => maybeCompanion(false), 1000);
       }
     });
 
@@ -208,10 +349,27 @@
 
   function normalizeReport(ai, fallback) {
     const out = Object.assign({}, fallback, ai || {});
-    const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "strength", "whisper"];
+    const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "strength", "whisper", "process", "mood"];
     strKeys.forEach((k) => {
       if (!out[k] || typeof out[k] !== "string") out[k] = fallback[k];
     });
+
+    // 心象处方：AI 只从知识库 ID 中选，具体步骤始终由本地知识库给出
+    const localRegs = (fallback.regulations || []).slice();
+    const chosen = ai && ai.regulation && window.XHFYKnowledge.regulations.find((r) => r.id === ai.regulation.id);
+    if (chosen) {
+      const rest = localRegs.filter((r) => r.id !== chosen.id);
+      localRegs.unshift({
+        id: chosen.id,
+        name: chosen.name,
+        duration: chosen.duration,
+        tag: chosen.tag,
+        science: chosen.science,
+        steps: chosen.steps.slice(),
+        why: (ai.regulation && ai.regulation.why) || (rest[0] && rest[0].why) || ""
+      });
+    }
+    out.regulations = localRegs.slice(0, 4);
     out.craft = Object.assign({}, fallback.craft, ai && ai.craft);
     if (!window.XHFYCraft.META[out.craft.style]) out.craft.style = fallback.craft.style;
     if (!out.craft.reason) out.craft.reason = fallback.craft.reason;
@@ -236,8 +394,8 @@
     state.busy = true;
     $("#analyzeBtn").disabled = true;
     state.reportPatternURL = "";
-    state.aiImageURL = "";
-    $("#aiArt").hidden = true;
+    state.regulationIndex = 0;
+    resetAiArt();
 
     scrollToEl("#step2");
     resetLoading();
@@ -265,7 +423,7 @@
     let aiVisionOK = false;
     try {
       const b64 = studio.dataURL(768).split(",")[1];
-      vision = await window.XHFYAI.vision(b64, text);
+      vision = await window.XHFYAI.vision(b64, text, analysis);
       aiVisionOK = true;
       setStage("vision", "done");
     } catch (e) {
@@ -359,6 +517,26 @@
       });
     });
 
+    // 过程印记与当下心情
+    const p = a.process || {};
+    const b = a.behavior || {};
+    $("#moodNow").textContent = r.mood;
+    $("#processText").textContent = r.process;
+    const chips = (b.tags || []).slice(0, 4).map((t) => "「" + t + "」");
+    if (p.activeSec) chips.push("落笔 " + Math.round(p.activeSec) + " 秒");
+    if (p.strokes) chips.push(p.strokes + " 笔");
+    if (p.distinctColors) chips.push(p.distinctColors + " 种颜色");
+    if (p.pauses) chips.push(p.pauses + " 次停顿");
+    $("#processChips").innerHTML = chips.map((t) => "<span>" + escapeHTML(t) + "</span>").join("");
+    $("#reportProcess").textContent = r.process;
+    $("#reportProcessChips").innerHTML = (b.details || []).map((d) =>
+      "<span><b>" + escapeHTML(d.label) + "</b>" + escapeHTML(d.hint) + "</span>").join("");
+    $("#reportMood").textContent = r.mood;
+
+    state.regulations = r.regulations || [];
+    state.regulationIndex = 0;
+    renderRegulation();
+
     $("#colorNarrative").textContent = r.colors;
     $("#lineNarrative").textContent = r.lines;
     $("#spaceNarrative").textContent = r.space;
@@ -401,6 +579,31 @@
     $("#reportMantra").textContent = r.guide.mantra || "";
   }
 
+  function renderRegulation() {
+    const list = state.regulations || [];
+    if (!list.length) return;
+    const idx = ((state.regulationIndex % list.length) + list.length) % list.length;
+    const reg = list[idx];
+    $("#regulationName").textContent = reg.name + (reg.duration ? " · " + reg.duration : "");
+    $("#regulationWhy").textContent = reg.why || "";
+    $("#regulationSteps").innerHTML = (reg.steps || []).map((s) => "<li>" + escapeHTML(s) + "</li>").join("");
+    $("#regulationScience").textContent = reg.science ? "依据：" + reg.science : "";
+    $("#regulationMore").hidden = list.length <= 1;
+
+    $("#reportRegName").textContent = reg.name + (reg.duration ? " · " + reg.duration : "") +
+      (reg.tag ? "（" + reg.tag + "）" : "");
+    $("#reportRegWhy").textContent = reg.why || "";
+    $("#reportRegSteps").innerHTML = (reg.steps || []).map((s) => "<li>" + escapeHTML(s) + "</li>").join("");
+    $("#reportRegScience").textContent = reg.science ? "依据：" + reg.science : "";
+  }
+
+  function initAnalysisActions() {
+    $("#regulationMore").addEventListener("click", () => {
+      state.regulationIndex++;
+      renderRegulation();
+    });
+  }
+
   function escapeHTML(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -417,6 +620,43 @@
     });
   }
 
+  function activePatternURL() {
+    if (state.craftView === "ai" && state.aiComposedURL) return state.aiComposedURL;
+    return state.craftURL;
+  }
+
+  function setCraftView(view) {
+    state.craftView = view;
+    const hasAI = !!state.aiComposedEl;
+    $$("#craftViewSwitch button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.view === view);
+    });
+    $("#craftCanvas").hidden = view === "ai";
+    $("#aiCraftCanvas").hidden = view !== "ai" || !hasAI;
+    $("#aiCraftEmpty").hidden = view !== "ai" || hasAI;
+    $("#aiArtMeta").hidden = !(view === "ai" && hasAI);
+    state.reportPatternURL = "";
+    applyMockup(activePatternURL());
+  }
+
+  function resetAiArt(keepView) {
+    state.aiImageURL = "";
+    state.aiBaseImg = null;
+    state.aiBaseStyle = "";
+    state.aiBlueprint = null;
+    state.aiComposedEl = null;
+    state.aiComposedURL = "";
+    state.reportPatternURL = "";
+    const el = $("#aiCraftCanvas");
+    if (el) el.getContext("2d").clearRect(0, 0, el.width, el.height);
+    $("#aiCraftCanvas").hidden = true;
+    $("#aiCraftEmpty").hidden = true;
+    $("#aiArtMeta").hidden = true;
+    $("#aiArtDownload").hidden = true;
+    $("#aiRedrawNote").hidden = false;
+    if (!keepView && state.craftView === "ai") setCraftView("local");
+  }
+
   async function renderCraft(style, showLoader) {
     const loader = $("#craftLoading");
     if (showLoader) loader.hidden = false;
@@ -431,11 +671,102 @@
       ctx.drawImage(c, 0, 0, target.width, target.height);
       state.craftURL = c.toDataURL("image/png");
       state.reportPatternURL = "";
-      applyMockup(state.craftURL);
+      applyMockup(activePatternURL());
     } catch (e) {
       toast("纹样生成失败，请重试");
     }
     if (showLoader) loader.hidden = true;
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("图片加载失败"));
+      img.src = src;
+    });
+  }
+
+  function drawAiComposed(size) {
+    if (!state.aiBaseImg) return null;
+    const style = state.aiBaseStyle || state.craftStyle;
+    const c = window.XHFYCraft.renderAI(state.aiBaseImg, studio, style, size || 1024);
+    if (!size || size === 1024) {
+      state.aiComposedEl = c;
+      const target = $("#aiCraftCanvas");
+      const ctx = target.getContext("2d");
+      ctx.clearRect(0, 0, target.width, target.height);
+      ctx.drawImage(c, 0, 0);
+      state.aiComposedURL = c.toDataURL("image/png");
+    }
+    return c;
+  }
+
+  function setAiButtons(loading) {
+    const label = loading ? "AI 二创中…" : "AI 二创当前工艺";
+    $("#aiRedraw").textContent = label;
+    $("#aiRedraw").disabled = loading;
+    $("#aiCraftEmptyBtn").disabled = loading;
+  }
+
+  async function generateAiCraft() {
+    if (!state.analysis || !state.report) {
+      toast("请先完成心象分析");
+      scrollToEl("#step1");
+      return;
+    }
+    if (studio.isEmpty()) {
+      toast("先画几笔吧，AI 才有可以重绘的心象");
+      scrollToEl("#step1");
+      return;
+    }
+    if (state.busy) return;
+    if (state.aiComposedEl && state.aiBaseStyle === state.craftStyle) {
+      setCraftView("ai");
+      toast("这一版 AI 二创已经生成");
+      return;
+    }
+
+    state.busy = true;
+    setAiButtons(true);
+    const loader = $("#craftLoading");
+    const loaderText = loader.querySelector("span");
+    const style = state.craftStyle;
+    const meta = window.XHFYCraft.META[style];
+    loader.hidden = false;
+    setCraftView("ai");
+    loaderText.textContent = "AI 正在读构图与元素…";
+
+    try {
+      const bp = await window.XHFYAI.craftBlueprint(state.analysis, state.report, style);
+      state.aiBlueprint = bp;
+      loaderText.textContent = "AI 正在重绘" + meta.short + "纹样…";
+      const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report);
+      state.aiImageURL = url;
+      loaderText.textContent = "正在取回图片，并叠回你的笔迹…";
+      const dataURL = await window.XHFYAI.imageToDataURL(url);
+      state.aiBaseImg = await loadImage(dataURL);
+      state.aiBaseStyle = style;
+      drawAiComposed(1024);
+      setCraftView("ai");
+
+      $("#aiArtTitle").textContent = "AI 二创 · " + meta.short + (bp.title ? " · " + bp.title : "");
+      const dl = $("#aiArtDownload");
+      dl.href = state.aiComposedURL;
+      dl.download = "心绘非遗_AI二创_" + meta.short + ".png";
+      dl.hidden = false;
+      $("#aiRedrawNote").hidden = true;
+      applyMockup(state.aiComposedURL);
+      toast("AI 二创完成：保留你的笔迹，重绘为" + meta.name, 4200);
+    } catch (e) {
+      setCraftView("local");
+      toast("AI 二创失败：" + e.message, 4800);
+    } finally {
+      loader.hidden = true;
+      loaderText.textContent = "正在重织纹样…";
+      setAiButtons(false);
+      state.busy = false;
+    }
   }
 
   function initCraftTabs() {
@@ -446,6 +777,8 @@
         if (style === state.craftStyle && state.craftEl) return;
         state.craftStyle = style;
         selectCraftTab(style);
+        // 换工艺后，之前的 AI 二创稿不再对应，退回本地纹样视图
+        if (state.aiComposedEl && state.aiBaseStyle !== style) resetAiArt(false);
         const meta = window.XHFYCraft.META[style];
         $("#craftName").textContent = meta.name;
         $("#craftDesc").textContent = meta.desc;
@@ -478,30 +811,10 @@
     $("#downloadPattern").addEventListener("click", () => downloadPattern(false));
     $("#downloadReportPattern").addEventListener("click", () => downloadPattern(true));
 
-    $("#aiRedraw").addEventListener("click", async () => {
-      if (!state.analysis) {
-        toast("请先完成心象分析");
-        return;
-      }
-      const btn = $("#aiRedraw");
-      btn.disabled = true;
-      const old = btn.textContent;
-      btn.textContent = "AI 重绘中…";
-      try {
-        const v = state.report.vision || {};
-        const els = (v.elements && v.elements.length) ? v.elements : (state.analysis.dominantColors || []).map((c) => c.name);
-        const colors = (state.analysis.dominantColors || []).map((c) => c.name);
-        const url = await window.XHFYAI.craftImage(state.craftStyle, els, colors);
-        state.aiImageURL = url;
-        $("#aiArtImg").src = url;
-        $("#aiArtDownload").href = url;
-        $("#aiArt").hidden = false;
-        toast("AI 灵感稿已生成（带平台水印，仅作灵感参考）", 3800);
-      } catch (e) {
-        toast("AI 重绘失败：" + e.message, 4200);
-      }
-      btn.disabled = false;
-      btn.textContent = old;
+    $("#aiRedraw").addEventListener("click", generateAiCraft);
+    $("#aiCraftEmptyBtn").addEventListener("click", generateAiCraft);
+    $$("#craftViewSwitch button").forEach((b) => {
+      b.addEventListener("click", () => setCraftView(b.dataset.view));
     });
 
     $("#toCraftBtn").addEventListener("click", () => scrollToEl("#step3"));
@@ -516,7 +829,9 @@
     toast("正在生成 2048px 打印稿…", 2400);
     await sleep(120);
     try {
-      const big = window.XHFYCraft.render(state.craftStyle, studio, 2048);
+      const big = (state.craftView === "ai" && state.aiBaseImg)
+        ? window.XHFYCraft.renderAI(state.aiBaseImg, studio, state.aiBaseStyle || state.craftStyle, 2048)
+        : window.XHFYCraft.render(state.craftStyle, studio, 2048);
       big.toBlob((blob) => {
         if (!blob) {
           toast("导出失败，请重试");
@@ -644,11 +959,16 @@
       return;
     }
     // 生成报告中的图样（缓存）
+    const activeURL = activePatternURL();
     if (!state.reportPatternURL && state.craftEl) {
-      const c = window.XHFYCraft.render(state.craftStyle, studio, 900);
-      state.reportPatternURL = c.toDataURL("image/png");
+      if (state.craftView === "ai" && state.aiComposedURL) {
+        state.reportPatternURL = state.aiComposedURL;
+      } else {
+        const c = window.XHFYCraft.render(state.craftStyle, studio, 900);
+        state.reportPatternURL = c.toDataURL("image/png");
+      }
     }
-    $("#reportPattern").src = state.reportPatternURL || state.craftURL;
+    $("#reportPattern").src = state.reportPatternURL || activeURL || state.craftURL;
     $("#reportOverlay").hidden = false;
     setNoScroll(true);
     $("#reportOverlay").scrollTop = 0;
@@ -750,6 +1070,8 @@
     initGuide();
     initMockup();
     initReport();
+    initCompanion();
+    initAnalysisActions();
     initSettings();
 
     // 初始示例纹样占位

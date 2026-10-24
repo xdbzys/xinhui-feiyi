@@ -242,6 +242,53 @@
     const softRatio = stats.strokes ? stats.soft / stats.strokes : 0;
     const lineRatio = stats.strokes ? stats.line / stats.strokes : 0;
 
+    // 作画过程信号：说明「怎么画」比只看「画了什么」多一层信息
+    const speedLabel = stats.strokeSpeed > 0.6
+      ? "偏快"
+      : stats.strokeSpeed < 0.2
+        ? "偏慢"
+        : "适中";
+    const process = {
+      totalSec: stats.totalSec,
+      activeSec: stats.activeSec,
+      strokes: stats.strokes,
+      undo: stats.undo,
+      redo: stats.redo,
+      clear: stats.clear,
+      eraser: stats.eraser,
+      pauses: stats.pauseCount,
+      longestPauseSec: stats.longestPauseSec,
+      distinctColors: stats.distinctColors,
+      colorSwitches: stats.colorSwitches,
+      toolCount: stats.toolCount,
+      strokeSpeed: stats.strokeSpeed,
+      speedLabel: speedLabel,
+      pauseMarks: stats.pauses,
+      changes: stats.undo + stats.eraser + stats.clear
+    };
+
+    // 行为标签：规则来自 knowledge.js 的 behaviorRules，只做确定性映射
+    const tagIds = [];
+    if (process.changes >= 3) tagIds.push("hesitate");
+    else if (process.changes === 0 && process.strokes >= 3) tagIds.push("decisive");
+    if (process.distinctColors >= 4 && process.colorSwitches >= 3) tagIds.push("explore");
+    if (process.distinctColors <= 1 && process.strokes >= 3) tagIds.push("mono");
+    if (process.pauses >= 2) tagIds.push("pause");
+    if (speedLabel === "偏快") tagIds.push("fast");
+    if (speedLabel === "偏慢" && process.strokes >= 2) tagIds.push("slow");
+    if (process.activeSec >= 90) tagIds.push("invest");
+    const rules = (window.XHFYKnowledge && window.XHFYKnowledge.behaviorRules) || [];
+    const behavior = {
+      tags: tagIds.map((id) => {
+        const r = rules.find((x) => x.id === id);
+        return r ? r.label : id;
+      }),
+      details: tagIds.map((id) => {
+        const r = rules.find((x) => x.id === id);
+        return r ? { id: r.id, label: r.label, hint: r.hint } : { id, label: id, hint: "" };
+      })
+    };
+
     // 六大心象维度（0-100）
     const scores = {
       warmth: clamp(32 + (warmRatio - coolRatio) * 55 + satAvg * 28 - neutralRatio * 8, 6, 96),
@@ -354,6 +401,8 @@
         sizeBias: coverage > 0.32 ? "画面偏大" : coverage < 0.07 ? "画面偏小" : "大小适中"
       },
       strokeStats: stats,
+      process,
+      behavior,
       hasDrawing: inkCount > total * 0.002,
       imageDataURL: src.toDataURL("image/jpeg", 0.85)
     };

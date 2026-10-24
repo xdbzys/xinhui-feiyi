@@ -15,19 +15,13 @@ const PORT = Number(process.env.PORT || 8787);
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   // 允许 HTTPS 页面（GitHub Pages）访问本机中继
   res.setHeader("Access-Control-Allow-Private-Network", "true");
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
-    return;
-  }
-
-  if (req.method !== "POST") {
-    res.writeHead(405, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: { message: "仅支持 POST" } }));
     return;
   }
 
@@ -38,10 +32,28 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-
   try {
+    // GET：用于代理 CogView 图片（图床不带 CORS 头，无法直接画进 canvas）
+    if (req.method === "GET") {
+      const upstream = await fetch(target);
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.writeHead(upstream.status, {
+        "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
+        "Cache-Control": "no-store"
+      });
+      res.end(buf);
+      return;
+    }
+
+    if (req.method !== "POST") {
+      res.writeHead(405, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "仅支持 GET / POST" } }));
+      return;
+    }
+
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+
     const upstream = await fetch(target, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

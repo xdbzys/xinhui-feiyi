@@ -110,13 +110,13 @@
         <article class="flow-card reveal">
           <span class="flow-no">贰</span>
           <h3>心象解码</h3>
-          <p>AI 观察色彩温度、线条张力与空间留白，结合你的自述，生成《专属心灵图鉴》。</p>
+          <p>AI 同时读画面与作画过程：色彩、线条、留白，还有停顿、改笔与换色，生成《专属心灵图鉴》与心象处方。</p>
           <span class="flow-en">READ</span>
         </article>
         <article class="flow-card reveal">
           <span class="flow-no">叁</span>
           <h3>非遗重构</h3>
-          <p>提取画面元素，以剪纸、扎染、蓝印花布、竹编的纹样语法，重新讲述你的心象。</p>
+          <p>AI 保留你的构图与笔迹，把朴素的涂鸦二创成细节完整的剪纸、扎染、蓝印花布或竹编。</p>
           <span class="flow-en">REWEAVE</span>
         </article>
         <article class="flow-card reveal">
@@ -154,6 +154,16 @@
                 <span class="empty-ring"></span>
                 <strong>落笔即心</strong>
                 <small>按住鼠标或手指，慢慢画</small>
+              </div>
+              <div class="companion" id="companion" hidden>
+                <span class="companion-dot" aria-hidden="true"></span>
+                <div class="companion-body">
+                  <p id="companionSay"></p>
+                  <div class="companion-actions">
+                    <button type="button" id="companionMore">换个提醒</button>
+                    <button type="button" id="companionClose" aria-label="收起提醒">✕</button>
+                  </div>
+                </div>
               </div>
               <div class="scan-layer" id="scanLayer" aria-hidden="true"><i></i></div>
             </div>
@@ -202,7 +212,7 @@
           <button id="analyzeBtn" class="btn btn-primary btn-wide" type="button">
             <span>让 AI 读一读这幅画</span><i>→</i>
           </button>
-          <p class="privacy-note">画作仅用于本次分析。发送给 AI 前会压缩为 768px 的图像，不上传原图。</p>
+          <p class="privacy-note">AI 不只读画面，也会读你的作画过程：停留、改笔、换色。画作仅用于本次分析，发送前会压缩为 768px 图像。</p>
         </aside>
       </div>
     </div>
@@ -231,7 +241,7 @@
           <div class="ink-orb" aria-hidden="true"><i></i><i></i><i></i><span></span></div>
           <p class="loading-title" id="loadingTitle">AI 正在读你的笔触</p>
           <ul class="loading-steps" id="loadingSteps">
-            <li data-stage="local"><span></span>提取色彩、线条与空间坐标</li>
+            <li data-stage="local"><span></span>提取画面与作画过程信号</li>
             <li data-stage="vision"><span></span>请智谱 GLM-4V 观察画面元素</li>
             <li data-stage="report"><span></span>撰写《专属心灵图鉴》</li>
             <li data-stage="craft"><span></span>匹配非遗纹样语法</li>
@@ -259,6 +269,24 @@
           </div>
 
           <div class="dimension-grid" id="dimensionGrid"></div>
+
+          <div class="insight-grid">
+            <article class="insight-card">
+              <span class="lang-no">PROCESS</span>
+              <h4>过程印记 · 你是怎么画的</h4>
+              <p id="moodNow"></p>
+              <div class="process-chips" id="processChips"></div>
+              <p class="micro" id="processText"></p>
+            </article>
+            <article class="insight-card prescription">
+              <span class="lang-no">PRESCRIPTION</span>
+              <h4>心象处方 · <span id="regulationName">4-7-8 呼吸锚定</span></h4>
+              <p class="micro" id="regulationWhy"></p>
+              <ol class="regulation-steps" id="regulationSteps"></ol>
+              <p class="regulation-science" id="regulationScience"></p>
+              <button class="link-btn" id="regulationMore" type="button">换一个更适合此刻的方法 →</button>
+            </article>
+          </div>
 
           <div class="language-grid">
             <article class="language-card">
@@ -297,7 +325,7 @@
         <div>
           <p class="kicker">STEP 03 · 非遗重构</p>
           <h2>让心里的风景，长成一件非遗</h2>
-          <p class="lead">AI 不复制你的画，而是理解它：提取元素、拆解形态，再用另一种古老的手艺重新讲述。</p>
+          <p class="lead">你的画可能很简单，但 AI 不会直接把它贴上去。系统先读懂构图与元素，再用生成式模型二创成细节完整的非遗纹样，最后把你的原笔迹轻轻叠回画面。</p>
         </div>
       </div>
 
@@ -317,11 +345,21 @@
           </button>
         </div>
 
+        <div class="craft-view-switch" id="craftViewSwitch" role="group" aria-label="图样视图">
+          <button class="active" type="button" data-view="local">本地纹样</button>
+          <button type="button" data-view="ai">AI 二创</button>
+        </div>
+
         <div class="craft-stage">
           <div class="craft-frame">
             <canvas id="craftCanvas" width="1024" height="1024" aria-label="非遗风格图样预览"></canvas>
+            <canvas id="aiCraftCanvas" width="1024" height="1024" hidden aria-label="AI 二创非遗作品"></canvas>
             <span class="craft-badge" id="craftBadge">非遗剪纸</span>
             <div class="craft-loading" id="craftLoading" hidden><i></i><span>正在重织纹样…</span></div>
+            <div class="ai-craft-empty" id="aiCraftEmpty" hidden>
+              <p>AI 会保留你的构图、主体位置与笔迹，把它重绘成细节更完整的非遗纹样。</p>
+              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">让 AI 二创当前工艺</button>
+            </div>
           </div>
           <aside class="craft-info">
             <p class="kicker red">REWEAVE</p>
@@ -335,11 +373,12 @@
             <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
             <div class="craft-actions">
               <button id="downloadPattern" class="btn btn-primary" type="button"><span>下载 2048px 图样</span><i>↓</i></button>
-              <button id="aiRedraw" class="btn btn-ghost" type="button">AI 重绘灵感稿</button>
+              <button id="aiRedraw" class="btn btn-ghost" type="button">AI 二创当前工艺</button>
             </div>
-            <div class="ai-art" id="aiArt" hidden>
-              <img id="aiArtImg" alt="智谱 CogView 生成的非遗灵感稿">
-              <div class="ai-art-meta"><span>智谱 CogView · 灵感稿</span><a id="aiArtDownload" target="_blank" rel="noopener">打开原图 ↗</a></div>
+            <p class="ai-redraw-note" id="aiRedrawNote">AI 二创会先读懂你的构图与元素，再重绘成更完整的非遗纹样，并把你的原笔迹轻轻叠回去——不是给原图套滤镜。</p>
+            <div class="ai-art-meta" id="aiArtMeta" hidden>
+              <span id="aiArtTitle">AI 二创 · 保留原笔迹</span>
+              <a href="#" id="aiArtDownload" hidden>下载 AI 二创稿 ↓</a>
             </div>
             <button id="toGuide" class="link-btn" type="button">带着这张图样，进入心愈手作 →</button>
           </aside>
@@ -497,8 +536,25 @@
         <p id="reportSpace"></p>
       </section>
 
+      <section class="report-section">
+        <h3><span>04</span>作画过程印记</h3>
+        <p id="reportProcess"></p>
+        <div class="report-process" id="reportProcessChips"></div>
+      </section>
+
+      <section class="report-section report-prescription">
+        <h3><span>05</span>此刻心情与心象处方</h3>
+        <p id="reportMood"></p>
+        <div class="report-rx">
+          <h4 id="reportRegName"></h4>
+          <p class="report-rx-why" id="reportRegWhy"></p>
+          <ol id="reportRegSteps"></ol>
+          <p class="report-rx-science" id="reportRegScience"></p>
+        </div>
+      </section>
+
       <section class="report-section report-craft">
-        <h3><span>04</span>你的非遗心象</h3>
+        <h3><span>06</span>你的非遗心象</h3>
         <div class="report-craft-grid">
           <figure class="report-pattern"><img id="reportPattern" alt="专属非遗图样"><figcaption id="reportCraftName">非遗剪纸</figcaption></figure>
           <div class="report-craft-copy">
@@ -509,7 +565,7 @@
       </section>
 
       <section class="report-section report-guide">
-        <h3><span>05</span>心愈手作指南</h3>
+        <h3><span>07</span>心愈手作指南</h3>
         <p class="report-guide-intro" id="reportGuideIntro"></p>
         <ol id="reportGuideSteps"></ol>
         <blockquote id="reportMantra"></blockquote>
@@ -539,7 +595,7 @@
       <button class="btn btn-ghost btn-small" id="resetKey" type="button">恢复默认</button>
     </div>
     <p class="modal-status" id="aiStatus">状态：未测试</p>
-    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4-Flash（文本）· CogView-3-Flash（图像）。</p>
+    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4-Flash（文本）· CogView-3-Flash（图像）。<br>完整 AI 体验需要在本机运行 <code>node tools/relay.mjs</code>；浏览器若弹出「访问本地网络」请选择允许。未启动中继时会自动使用本地心象引擎。</p>
   </div>
 </div>
 

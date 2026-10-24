@@ -47,6 +47,23 @@
       this.speedCount = 0;
       this.softSprites = new Map();
 
+      // 作画过程记录：不录屏，只记录可解释的行为信号
+      this.behavior = {
+        startedAt: 0,
+        lastStrokeEndAt: 0,
+        lastActionAt: 0,
+        firstStrokeAt: 0,
+        strokes: [],
+        pauses: [],
+        undo: 0,
+        redo: 0,
+        clear: 0,
+        colorHistory: [],
+        colorSet: new Set(),
+        toolHistory: [],
+        toolSet: new Set()
+      };
+
       this._bind();
     }
 
@@ -74,23 +91,48 @@
       this.canvas.setPointerCapture && this.canvas.setPointerCapture(e.pointerId);
       const p = this._pos(e);
       const now = performance.now();
+      const b = this.behavior;
+
+      if (!b.startedAt) b.startedAt = now;
+      // 上一笔结束到这一笔开始之间的停顿，是犹豫与思考的痕迹
+      if (b.lastStrokeEndAt && b.strokes.length) {
+        const gap = now - b.lastStrokeEndAt;
+        if (gap > 1600) {
+          b.pauses.push({
+            ms: Math.round(gap),
+            x: Math.round(p.x),
+            y: Math.round(p.y),
+            afterStroke: b.strokes.length
+          });
+        }
+      }
+      b.lastActionAt = now;
+
       this.drawing = true;
       this.last = { ...p, t: now };
       this.lastTime = now;
       this.speedSum = 0;
       this.speedCount = 0;
+      this.maxSpeedSample = 0;
       this.current = {
         tool: this.tool,
         color: this.color,
         size: this.size,
+        startedAt: now,
         points: [{ x: p.x, y: p.y }]
       };
       this.strokes.push(this.current);
       this.redoStack.length = 0;
+      if (this.tool !== "eraser") b.colorSet.add(this.color);
+      b.toolSet.add(this.tool);
       if (this.tool === "dot") this._dot(p, 3);
       else this._segment(p, p, true);
       this._changed();
-      if (this.options.onFirstStroke && this.strokes.length === 1) this.options.onFirstStroke();
+      if (this.options.onFirstStroke && this.strokes.length === 1) {
+        b.firstStrokeAt = now;
+        this.options.onFirstStroke();
+      }
+      if (this.options.onStrokeStart) this.options.onStrokeStart(this);
     }
 
     _move(e) {
@@ -100,8 +142,11 @@
       const now = performance.now();
       const dt = Math.max(1, now - this.lastTime);
       const dist = Math.hypot(p.x - this.last.x, p.y - this.last.y);
-      this.speedSum += dist / dt;
+      const speed = dist / dt;
+      this.speedSum += speed;
       this.speedCount++;
+      if (speed > (this.maxSpeedSample || 0)) this.maxSpeedSample = speed;
+      this.behavior.lastActionAt = now;
       const minDist = this.tool === "dot" ? 3 : Math.max(1.2, this.size * 0.12);
       if (dist < minDist) {
         // 平滑补齐：把微小位移合并到最后一点，避免点过密
@@ -119,14 +164,46 @@
 
     _up(e) {
       if (!this.drawing) return;
+      const now = performance.now();
       this.drawing = false;
       if (this.current && this.current.points.length === 1) {
         const p = this.current.points[0];
         this._segment(p, p, true);
       }
+      if (this.current) {
+        const s = this.current;
+        const pts = s.points;
+        let length = 0;
+        let minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
+        for (let i = 0; i < pts.length; i++) {
+          if (i) length += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+          minX = Math.min(minX, pts[i].x);
+          maxX = Math.max(maxX, pts[i].x);
+          minY = Math.min(minY, pts[i].y);
+          maxY = Math.max(maxY, pts[i].y);
+        }
+        const duration = Math.max(1, now - (s.startedAt || now));
+        this.behavior.strokes.push({
+          tool: s.tool,
+          color: s.color,
+          size: s.size,
+          points: pts.length,
+          length: Math.round(length),
+          duration: Math.round(duration),
+          avgSpeed: +(length / duration).toFixed(3),
+          maxSpeed: +(this.maxSpeedSample || 0).toFixed(3),
+          box: {
+            x: Math.round(minX), y: Math.round(minY),
+            w: Math.round(maxX - minX), h: Math.round(maxY - minY)
+          }
+        });
+      }
+      this.behavior.lastStrokeEndAt = now;
+      this.behavior.lastActionAt = now;
       this.current = null;
       this.last = null;
       this._changed();
+      if (this.options.onStrokeEnd) this.options.onStrokeEnd(this);
     }
 
     _segment(a, b, first) {
@@ -302,26 +379,35 @@
 
     undo() {
       if (!this.strokes.length) return false;
+      this.behavior.undo++;
+      this.behavior.lastActionAt = performance.now();
       this.redoStack.push(this.strokes.pop());
       this.redraw();
       this._changed();
+      if (this.options.onStrokeEnd) this.options.onStrokeEnd(this);
       return true;
     }
 
     redo() {
       if (!this.redoStack.length) return false;
+      this.behavior.redo++;
+      this.behavior.lastActionAt = performance.now();
       this.strokes.push(this.redoStack.pop());
       this.redraw();
       this._changed();
+      if (this.options.onStrokeEnd) this.options.onStrokeEnd(this);
       return true;
     }
 
     clear() {
       if (!this.strokes.length) return;
+      this.behavior.clear++;
+      this.behavior.lastActionAt = performance.now();
       this.strokes.length = 0;
       this.redoStack.length = 0;
       this.redraw();
       this._changed();
+      if (this.options.onStrokeEnd) this.options.onStrokeEnd(this);
     }
 
     _changed() {
@@ -338,6 +424,7 @@
       let soft = 0;
       let line = 0;
       let dot = 0;
+      let eraser = 0;
       for (const s of this.strokes) {
         points += s.points.length;
         for (let i = 1; i < s.points.length; i++) {
@@ -345,9 +432,23 @@
         }
         if (s.tool === "soft") soft++;
         else if (s.tool === "dot") dot++;
+        else if (s.tool === "eraser") eraser++;
         else if (s.tool === "line") line++;
       }
       const avgSpeed = this.speedCount ? this.speedSum / this.speedCount : 0;
+      const b = this.behavior;
+      const active = b.strokes.reduce((n, s) => n + s.duration, 0) / 1000;
+      const total = b.startedAt ? (performance.now() - b.startedAt) / 1000 : 0;
+      const pauses = b.pauses;
+      const longestPause = pauses.reduce((n, p) => Math.max(n, p.ms), 0) / 1000;
+      const colorSwitches = b.colorHistory.length;
+      const distinctColors = b.colorSet.size;
+      const toolCount = b.toolSet.size;
+      const strokeSpeed = b.strokes.length
+        ? b.strokes.reduce((n, s) => n + s.avgSpeed, 0) / b.strokes.length
+        : 0;
+      const maxSpeed = b.strokes.reduce((n, s) => Math.max(n, s.maxSpeed), 0);
+
       return {
         strokes: this.strokes.length,
         points,
@@ -355,12 +456,91 @@
         soft,
         line,
         dot,
-        avgSpeed: +avgSpeed.toFixed(2)
+        eraser,
+        avgSpeed: +avgSpeed.toFixed(2),
+        // 过程信号
+        totalSec: +total.toFixed(1),
+        activeSec: +active.toFixed(1),
+        pauseCount: pauses.length,
+        longestPauseSec: +longestPause.toFixed(1),
+        undo: b.undo,
+        redo: b.redo,
+        clear: b.clear,
+        colorSwitches,
+        distinctColors,
+        toolCount,
+        strokeSpeed: +strokeSpeed.toFixed(3),
+        maxSpeed: +maxSpeed.toFixed(3),
+        pauses: pauses.slice(-8),
+        strokeLog: b.strokes.slice(-40)
       };
     }
 
-    setTool(tool) { this.tool = tool; }
-    setColor(color) { this.color = color; }
+    /** 轻量实时估计，供 AI 陪伴引导使用 */
+    liveStats() {
+      const b = this.behavior;
+      const now = performance.now();
+      const elapsed = b.startedAt ? (now - b.startedAt) / 1000 : 0;
+      let length = 0;
+      let area = 0;
+      let minX = W, maxX = 0, minY = H, maxY = 0;
+      for (const s of this.strokes) {
+        if (s.tool === "eraser") continue;
+        const pts = s.points;
+        let strokeLen = 0;
+        for (let i = 1; i < pts.length; i++) {
+          strokeLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        }
+        length += strokeLen;
+        area += strokeLen * s.size;
+        for (const p of pts) {
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        }
+      }
+      const totalBrush = this.strokes.filter((s) => s.tool !== "eraser").length;
+      const coverage = Math.min(1, area / (W * H));
+      const bboxW = totalBrush ? maxX - minX : 0;
+      const bboxH = totalBrush ? maxY - minY : 0;
+      const idle = b.lastActionAt ? (now - b.lastActionAt) / 1000 : 0;
+      return {
+        elapsed: +elapsed.toFixed(1),
+        strokes: totalBrush,
+        coverage: +coverage.toFixed(3),
+        bboxW: Math.round(bboxW),
+        bboxH: Math.round(bboxH),
+        canvasW: W,
+        canvasH: H,
+        idle: +idle.toFixed(1),
+        distinctColors: b.colorSet.size,
+        colorSwitches: b.colorHistory.length,
+        erasers: this.strokes.filter((s) => s.tool === "eraser").length,
+        undos: b.undo,
+        clears: b.clear,
+        pauses: b.pauses.length,
+        recentColors: Array.from(b.colorSet),
+        tool: this.tool,
+        drawing: this.drawing
+      };
+    }
+
+    setTool(tool) {
+      if (tool !== this.tool) {
+        this.behavior.toolHistory.push(tool);
+        this.behavior.toolSet.add(tool);
+        this.behavior.lastActionAt = performance.now();
+      }
+      this.tool = tool;
+    }
+    setColor(color) {
+      if (color !== this.color) {
+        // 只记录「换色」这个动作；是否真正用过某颜色，以落笔时的 colorSet 为准
+        this.behavior.colorHistory.push(color);
+        this.behavior.lastActionAt = performance.now();
+        if (this.options.onColorChange) this.options.onColorChange(this);
+      }
+      this.color = color;
+    }
     setSize(size) { this.size = size; }
 
     /** 返回带纸底与画作的合成画布 */
@@ -396,6 +576,31 @@
 
     dataURL(width) {
       return this.composite(width || 480).toDataURL("image/jpeg", 0.86);
+    }
+
+    /** 透明背景的纯笔迹图，用于 AI 二创上的「原笔迹」叠层 */
+    traceDataURL(width) {
+      const w = width || 480;
+      const h = Math.round((w / W) * H);
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      ctx.scale(w / W, h / H);
+      // 用独立上下文重放笔迹，不改动当前画布
+      const mainCtx = this.ctx;
+      const mainCanvas = this.canvas;
+      this.ctx = ctx;
+      this.canvas = out;
+      for (const stroke of this.strokes) {
+        this._drawStroke(stroke);
+      }
+      this.ctx = mainCtx;
+      this.canvas = mainCanvas;
+      ctx.restore();
+      return out.toDataURL("image/png");
     }
   }
 

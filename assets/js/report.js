@@ -143,6 +143,64 @@
     return t;
   }
 
+  /** 过程印记：说明「怎么画」——时间、停顿、改笔、换色 */
+  function processNarrative(analysis) {
+    const p = analysis.process || {};
+    const b = analysis.behavior || {};
+    const parts = [];
+    if (p.activeSec) {
+      parts.push("你在这幅画上真正落笔约 " + Math.max(1, Math.round(p.activeSec)) + " 秒，落下 " + (p.strokes || 0) + " 笔");
+    }
+    if (p.distinctColors) {
+      parts.push("用了 " + p.distinctColors + " 种颜色" +
+        (p.colorSwitches >= 4 ? "，中途换色 " + p.colorSwitches + " 次" : "，颜色始终比较集中"));
+    }
+    if (p.pauses >= 2) {
+      parts.push("落笔之间停顿了 " + p.pauses + " 次" +
+        (p.longestPauseSec >= 4 ? "，最长的一次约 " + Math.round(p.longestPauseSec) + " 秒" : ""));
+    }
+    if (p.changes >= 2) {
+      parts.push("有 " + p.changes + " 次撤销或擦除的痕迹");
+    }
+    if (p.speedLabel === "偏快") parts.push("笔速偏快，能量更愿意往外走");
+    else if (p.speedLabel === "偏慢") parts.push("笔速偏慢，每一笔都落得谨慎");
+    if (!parts.length) return "这一次你画得很安静，过程本身没有留下太多起伏。";
+    let text = parts.join("；") + "。";
+    if (b.tags && b.tags.length) {
+      text += "过程里最明显的是「" + b.tags[0] + "」——" +
+        ((b.details && b.details[0] && b.details[0].hint) || "它也是你此刻状态的一部分") + "。";
+    }
+    return text;
+  }
+
+  /** 当下心情：把六维与过程收成一句可以读出来的描述 */
+  function moodNowOf(analysis) {
+    const s = analysis.scores;
+    const p = analysis.process || {};
+    const tone = s.warmth >= 60
+      ? "心里还有温度，愿意靠近让你舒服的东西"
+      : s.warmth <= 40
+        ? "情绪的温度被调得比较低，像把自己收进了一件薄外套"
+        : "温度不远不近，你还在试探";
+    const energy = s.vitality >= 62
+      ? "力气还在流动"
+      : s.vitality <= 42
+        ? "能量偏低，需要被温和地补一补"
+        : "力气不多不少";
+    const load = s.tension >= 62
+      ? "身体可能还替你绷着什么"
+      : p.changes >= 3
+        ? "有些地方你反复斟酌过，在意得很认真"
+        : "整体是松的，允许事情慢一点";
+    return "此刻的你，也许" + tone + "；" + energy + "；" + load + "。";
+  }
+
+  /** 心象处方：从知识库里挑最贴合当前状态的调节方法 */
+  function regulationsOf(analysis) {
+    if (!window.XHFYKnowledge || !window.XHFYKnowledge.recommendRegulation) return [];
+    return window.XHFYKnowledge.recommendRegulation(analysis, 3);
+  }
+
   function strengthOf(analysis) {
     const s = analysis.scores;
     const names = dominantNames(analysis);
@@ -255,6 +313,9 @@
       space: spaceNarrative(analysis),
       strength: strengthOf(analysis),
       whisper: whisperOf(analysis),
+      process: processNarrative(analysis),
+      mood: moodNowOf(analysis),
+      regulations: regulationsOf(analysis),
       craft: {
         style,
         reason: CRAFT_REASON[style],
@@ -402,6 +463,9 @@
     dimensionHTML,
     scoreLabel,
     makeFallbackReport,
+    processNarrative,
+    moodNowOf,
+    regulationsOf,
     makeGuide,
     pickCraft,
     dateText,

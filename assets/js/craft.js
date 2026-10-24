@@ -897,6 +897,194 @@
     sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, "rgba(74,59,38,0.9)", "#EFDFC0");
   }
 
+  /* ---------------- AI 二创合成 ---------------- */
+
+  /** 把用户笔迹重染成单一颜色，作为 AI 二创稿上的「原笔迹叠层」 */
+  function traceCanvas(studio, width, color) {
+    const w = width;
+    const h = Math.round((w / 960) * 640);
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const x = c.getContext("2d");
+    if (!studio || studio.isEmpty()) return c;
+    x.drawImage(studio.canvas, 0, 0, w, h);
+    x.globalCompositeOperation = "source-in";
+    x.fillStyle = color;
+    x.fillRect(0, 0, w, h);
+    return c;
+  }
+
+  /** 二创稿的非遗装裱边框 */
+  function aiFrame(ctx, W, inset, style, rng) {
+    const red = "#A6382A";
+    const indigo = "#1D3550";
+    const bamboo = "#8C6E3F";
+
+    if (style === "papercut") {
+      // 红纸边框 + 锯齿内边 + 四角团花
+      ctx.save();
+      ctx.fillStyle = "rgba(166,56,42,0.10)";
+      ctx.fillRect(0, 0, W, inset);
+      ctx.fillRect(0, W - inset, W, inset);
+      ctx.fillRect(0, 0, inset, W);
+      ctx.fillRect(W - inset, 0, inset, W);
+      ctx.strokeStyle = red;
+      ctx.lineWidth = Math.max(2, W * 0.0045);
+      ctx.strokeRect(W * 0.018, W * 0.018, W * 0.964, W * 0.964);
+      sawtooth(ctx, W, W * 0.03, W * 0.02, W * 0.012, red);
+      [0.065, 0.935].forEach((p) => {
+        [0.065, 0.935].forEach((q) => flower(ctx, W * p, W * q, W * 0.022, red, 0.9));
+      });
+      ctx.restore();
+      sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, red, "#F4EBDD");
+      return;
+    }
+
+    if (style === "tiedye") {
+      ctx.save();
+      ctx.fillStyle = "#16293D";
+      ctx.fillRect(0, 0, W, inset * 0.86);
+      ctx.fillRect(0, W - inset * 0.86, W, inset * 0.86);
+      ctx.fillRect(0, 0, inset * 0.86, W);
+      ctx.fillRect(W - inset * 0.86, 0, inset * 0.86, W);
+      // 手工缝线：白色虚线 + 轻微抖动
+      ctx.strokeStyle = "rgba(244,239,225,0.72)";
+      ctx.lineWidth = Math.max(1.5, W * 0.003);
+      ctx.setLineDash([W * 0.014, W * 0.011]);
+      ctx.lineDashOffset = (rng() * W) % 20;
+      ctx.strokeRect(W * 0.036, W * 0.036, W * 0.928, W * 0.928);
+      ctx.setLineDash([]);
+      // 四角扎结
+      [0.05, 0.95].forEach((p) => {
+        [0.05, 0.95].forEach((q) => {
+          const g = ctx.createRadialGradient(W * p, W * q, 0, W * p, W * q, W * 0.035);
+          g.addColorStop(0, "rgba(255,255,255,0.85)");
+          g.addColorStop(0.45, "rgba(127,161,184,0.45)");
+          g.addColorStop(1, "rgba(22,41,61,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(W * p, W * q, W * 0.035, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+      ctx.restore();
+      sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, indigo, "#EFE6D4");
+      return;
+    }
+
+    if (style === "calico") {
+      ctx.save();
+      ctx.fillStyle = "#26425F";
+      ctx.fillRect(0, 0, W, inset * 0.9);
+      ctx.fillRect(0, W - inset * 0.9, W, inset * 0.9);
+      ctx.fillRect(0, 0, inset * 0.9, W);
+      ctx.fillRect(W - inset * 0.9, 0, inset * 0.9, W);
+      // 白花点沿边框排布
+      const step = W * 0.052;
+      for (let x = step; x < W - step; x += step) {
+        flower(ctx, x, W * 0.034, W * 0.012, "#F4EFE1", 0.75);
+        flower(ctx, x, W * 0.966, W * 0.012, "#F4EFE1", 0.75);
+      }
+      for (let y = step; y < W - step; y += step) {
+        flower(ctx, W * 0.034, y, W * 0.012, "#F4EFE1", 0.75);
+        flower(ctx, W * 0.966, y, W * 0.012, "#F4EFE1", 0.75);
+      }
+      ctx.restore();
+      sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, "#26425F", "#F4EFE1");
+      return;
+    }
+
+    // 竹编：四边竹篾交替
+    ctx.save();
+    const slats = 26;
+    const gap = W / slats;
+    ctx.fillStyle = "#E8D6AE";
+    ctx.fillRect(0, 0, W, inset * 0.78);
+    ctx.fillRect(0, W - inset * 0.78, W, inset * 0.78);
+    ctx.fillRect(0, 0, inset * 0.78, W);
+    ctx.fillRect(W - inset * 0.78, 0, inset * 0.78, W);
+    for (let i = 0; i < slats; i++) {
+      const x = i * gap;
+      const y = i * gap;
+      ctx.fillStyle = i % 2 ? "rgba(140,110,63,0.30)" : "rgba(201,169,106,0.26)";
+      ctx.fillRect(x, 0, gap * 0.52, inset * 0.78);
+      ctx.fillRect(x, W - inset * 0.78, gap * 0.52, inset * 0.78);
+      ctx.fillRect(0, y, inset * 0.78, gap * 0.52);
+      ctx.fillRect(W - inset * 0.78, y, inset * 0.78, gap * 0.52);
+    }
+    ctx.strokeStyle = bamboo;
+    ctx.lineWidth = Math.max(1.6, W * 0.0028);
+    ctx.strokeRect(W * 0.022, W * 0.022, W * 0.956, W * 0.956);
+    ctx.restore();
+    sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, bamboo, "#F0E2C4");
+  }
+
+  /**
+   * 把 AI 重绘底图与用户原笔迹合成一张非遗作品
+   * @param {HTMLImageElement} baseImage 已加载完成的 CogView 图
+   * @param {PaintStudio} studio
+   * @param {string} style
+   * @param {number} size
+   */
+  function renderAI(baseImage, studio, style, size) {
+    const W = size || 1024;
+    const out = document.createElement("canvas");
+    out.width = W;
+    out.height = W;
+    const ctx = out.getContext("2d");
+    const rng = mulberry32(918273 + style.length * 451);
+    const inset = W * 0.055;
+    const art = W - inset * 2;
+
+    paperBase(ctx, W, PAPER, rng);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(inset, inset, art, art);
+    ctx.clip();
+
+    if (baseImage && baseImage.width) {
+      const scale = Math.max(art / baseImage.width, art / baseImage.height);
+      const dw = baseImage.width * scale;
+      const dh = baseImage.height * scale;
+      ctx.drawImage(baseImage, inset + (art - dw) / 2, inset + (art - dh) / 2, dw, dh);
+    } else {
+      ctx.fillStyle = "#EFE5D4";
+      ctx.fillRect(inset, inset, art, art);
+    }
+
+    // 原笔迹叠层：保留用户自己的形状与用力痕迹
+    const ghostColor = (style === "tiedye" || style === "calico") ? "#0E2035" : "#7A2418";
+    const ghost = traceCanvas(studio, Math.round(art * 1.05), ghostColor);
+    const gw = art * 0.94;
+    const gh = (gw / ghost.width) * ghost.height;
+    ctx.save();
+    ctx.globalCompositeOperation = "soft-light";
+    ctx.globalAlpha = 0.62;
+    ctx.drawImage(ghost, inset + (art - gw) / 2, inset + (art - gh) / 2, gw, gh);
+    ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    ctx.globalAlpha = 0.1;
+    ctx.drawImage(ghost, inset + (art - gw) / 2, inset + (art - gh) / 2, gw, gh);
+    ctx.restore();
+
+    // 内框细线与轻微暗角，让画面收住
+    ctx.strokeStyle = "rgba(30,28,25,0.22)";
+    ctx.lineWidth = Math.max(1, W * 0.0016);
+    ctx.strokeRect(inset, inset, art, art);
+    const vg = ctx.createRadialGradient(W / 2, W / 2, W * 0.3, W / 2, W / 2, W * 0.78);
+    vg.addColorStop(0, "rgba(30,28,25,0)");
+    vg.addColorStop(1, "rgba(30,28,25,0.08)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(inset, inset, art, art);
+    ctx.restore();
+
+    aiFrame(ctx, W, inset, style, rng);
+    return out;
+  }
+
   function render(style, studio, size) {
     const W = size || 1024;
     const scene = buildScene(studio, W);
@@ -925,5 +1113,5 @@
     return out;
   }
 
-  window.XHFYCraft = { render, META };
+  window.XHFYCraft = { render, renderAI, META };
 })();
