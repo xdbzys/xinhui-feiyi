@@ -1337,7 +1337,8 @@ a { color: inherit; }
 }
 #craftCanvas { display: block; width: 100%; height: 100%; background: #f4ebdd; }
 #aiCraftCanvas { display: block; width: 100%; height: 100%; background: #f4ebdd; animation: fadeIn 0.7s var(--ease); }
-#craftCanvas[hidden], #aiCraftCanvas[hidden] { display: none; }
+#aiCraftImg { display: block; width: 100%; height: 100%; object-fit: cover; background: #f4ebdd; animation: fadeIn 0.7s var(--ease); }
+#craftCanvas[hidden], #aiCraftCanvas[hidden], #aiCraftImg[hidden] { display: none; }
 
 .ai-craft-empty {
   position: absolute;

@@ -621,18 +621,19 @@
   }
 
   function activePatternURL() {
-    if (state.craftView === "ai" && state.aiComposedURL) return state.aiComposedURL;
+    if (state.craftView === "ai" && state.aiImageURL) return state.aiImageURL;
     return state.craftURL;
   }
 
   function setCraftView(view) {
     state.craftView = view;
-    const hasAI = !!state.aiComposedEl;
+    const hasAI = !!state.aiImageURL;
     $$("#craftViewSwitch button").forEach((b) => {
       b.classList.toggle("active", b.dataset.view === view);
     });
     $("#craftCanvas").hidden = view === "ai";
-    $("#aiCraftCanvas").hidden = view !== "ai" || !hasAI;
+    $("#aiCraftCanvas").hidden = true;
+    $("#aiCraftImg").hidden = view !== "ai" || !hasAI;
     $("#aiCraftEmpty").hidden = view !== "ai" || hasAI;
     $("#aiArtMeta").hidden = !(view === "ai" && hasAI);
     state.reportPatternURL = "";
@@ -650,6 +651,8 @@
     const el = $("#aiCraftCanvas");
     if (el) el.getContext("2d").clearRect(0, 0, el.width, el.height);
     $("#aiCraftCanvas").hidden = true;
+    $("#aiCraftImg").hidden = true;
+    $("#aiCraftImg").removeAttribute("src");
     $("#aiCraftEmpty").hidden = true;
     $("#aiArtMeta").hidden = true;
     $("#aiArtDownload").hidden = true;
@@ -743,21 +746,27 @@
       loaderText.textContent = "AI 正在重绘" + meta.short + "纹样…";
       const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report);
       state.aiImageURL = url;
-      loaderText.textContent = "正在取回图片，并叠回你的笔迹…";
-      const dataURL = await window.XHFYAI.imageToDataURL(url);
-      state.aiBaseImg = await loadImage(dataURL);
       state.aiBaseStyle = style;
-      drawAiComposed(1024);
+
+      // 直接用 <img> 展示 AI 生成图（图片源站不带 CORS 头，无法画进 canvas，
+      // 但 <img> 展示不受限；用户笔迹已通过蓝图提示词融入重绘）
+      const img = $("#aiCraftImg");
+      img.src = url;
+      img.alt = "AI 二创 · " + meta.short;
+      img.hidden = false;
+      $("#aiCraftCanvas").hidden = true;
       setCraftView("ai");
 
       $("#aiArtTitle").textContent = "AI 二创 · " + meta.short + (bp.title ? " · " + bp.title : "");
       const dl = $("#aiArtDownload");
-      dl.href = state.aiComposedURL;
+      dl.href = url;
       dl.download = "心绘非遗_AI二创_" + meta.short + ".png";
       dl.hidden = false;
+      dl.target = "_blank";
+      dl.rel = "noopener";
       $("#aiRedrawNote").hidden = true;
-      applyMockup(state.aiComposedURL);
-      toast("AI 二创完成：保留你的笔迹，重绘为" + meta.name, 4200);
+      applyMockup(url);
+      toast("AI 二创完成：已重绘为" + meta.name, 4200);
     } catch (e) {
       setCraftView("local");
       toast("AI 二创失败：" + e.message, 4800);

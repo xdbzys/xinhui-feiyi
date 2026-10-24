@@ -369,6 +369,188 @@
     ctx.restore();
   }
 
+  /* ---------- 传统纹样原语：回纹 · 云纹 · 团花 · 缠枝纹 · 如意纹 · 月牙纹 ---------- */
+
+  /** 回纹（万字不到头）：沿矩形边框排布的连续折线 */
+  function meanderBorder(ctx, x, y, w, h, color, lineW, unit) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineW;
+    ctx.lineJoin = "miter";
+    const u = unit;
+    // 上边
+    for (let cx = x; cx < x + w - u; cx += u * 2) {
+      ctx.beginPath();
+      ctx.moveTo(cx, y);
+      ctx.lineTo(cx, y + u);
+      ctx.lineTo(cx + u, y + u);
+      ctx.lineTo(cx + u, y);
+      ctx.lineTo(cx + u * 2, y);
+      ctx.stroke();
+    }
+    // 下边
+    for (let cx = x; cx < x + w - u; cx += u * 2) {
+      ctx.beginPath();
+      ctx.moveTo(cx, y + h);
+      ctx.lineTo(cx, y + h - u);
+      ctx.lineTo(cx + u, y + h - u);
+      ctx.lineTo(cx + u, y + h);
+      ctx.lineTo(cx + u * 2, y + h);
+      ctx.stroke();
+    }
+    // 左边
+    for (let cy = y; cy < y + h - u; cy += u * 2) {
+      ctx.beginPath();
+      ctx.moveTo(x, cy);
+      ctx.lineTo(x + u, cy);
+      ctx.lineTo(x + u, cy + u);
+      ctx.lineTo(x, cy + u);
+      ctx.lineTo(x, cy + u * 2);
+      ctx.stroke();
+    }
+    // 右边
+    for (let cy = y; cy < y + h - u; cy += u * 2) {
+      ctx.beginPath();
+      ctx.moveTo(x + w, cy);
+      ctx.lineTo(x + w - u, cy);
+      ctx.lineTo(x + w - u, cy + u);
+      ctx.lineTo(x + w, cy + u);
+      ctx.lineTo(x + w, cy + u * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 云纹：如意云头，单个卷云纹样 */
+  function cloudMotif(ctx, x, y, size, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.fillStyle = color;
+    const s = size;
+    ctx.beginPath();
+    ctx.moveTo(x - s, y);
+    ctx.bezierCurveTo(x - s, y - s * 0.7, x - s * 0.4, y - s * 0.9, x, y - s * 0.5);
+    ctx.bezierCurveTo(x + s * 0.4, y - s * 0.9, x + s, y - s * 0.7, x + s, y);
+    ctx.bezierCurveTo(x + s * 0.7, y + s * 0.15, x + s * 0.4, y + s * 0.5, x, y + s * 0.35);
+    ctx.bezierCurveTo(x - s * 0.4, y + s * 0.5, x - s * 0.7, y + s * 0.15, x - s, y);
+    ctx.closePath();
+    ctx.fill();
+    // 云头内卷
+    ctx.beginPath();
+    ctx.arc(x - s * 0.35, y - s * 0.1, s * 0.18, 0, Math.PI * 2);
+    ctx.arc(x + s * 0.35, y - s * 0.1, s * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 层叠团花：多层花瓣的放射对称花卉 */
+  function medallionFlower(ctx, x, y, r, color, alpha, petals) {
+    const p = petals || 8;
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.fillStyle = color;
+    // 外层花瓣（尖瓣）
+    for (let i = 0; i < p; i++) {
+      const a = (i / p) * Math.PI * 2 - Math.PI / 2;
+      const px = x + Math.cos(a) * r * 0.7;
+      const py = y + Math.sin(a) * r * 0.7;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.55);
+      ctx.quadraticCurveTo(r * 0.22, -r * 0.15, 0, r * 0.2);
+      ctx.quadraticCurveTo(-r * 0.22, -r * 0.15, 0, -r * 0.55);
+      ctx.fill();
+      ctx.restore();
+    }
+    // 内层圆瓣
+    for (let i = 0; i < p; i++) {
+      const a = (i / p) * Math.PI * 2;
+      const px = x + Math.cos(a) * r * 0.32;
+      const py = y + Math.sin(a) * r * 0.32;
+      ctx.beginPath();
+      ctx.arc(px, py, r * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 花心
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 缠枝纹：连续卷草藤蔓，沿路径延伸 */
+  function vineScroll(ctx, cx, cy, radius, color, alpha, turns) {
+    const t = turns || 2;
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, radius * 0.06);
+    ctx.lineCap = "round";
+    const steps = 120;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const p = i / steps;
+      const ang = p * Math.PI * 2 * t;
+      const r = radius * (0.3 + p * 0.7);
+      const wobble = Math.sin(p * Math.PI * 8) * radius * 0.06;
+      const x = cx + Math.cos(ang) * (r + wobble);
+      const y = cy + Math.sin(ang) * (r + wobble);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // 藤蔓上的小叶
+    ctx.fillStyle = color;
+    for (let i = 8; i < steps; i += 14) {
+      const p = i / steps;
+      const ang = p * Math.PI * 2 * t;
+      const r = radius * (0.3 + p * 0.7);
+      const x = cx + Math.cos(ang) * r;
+      const y = cy + Math.sin(ang) * r;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ang + Math.PI / 2);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius * 0.05, radius * 0.11, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  /** 如意纹：对称如意头纹样 */
+  function ruyiMotif(ctx, x, y, size, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.fillStyle = color;
+    const s = size;
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 0.6);
+    ctx.bezierCurveTo(x - s * 0.5, y - s * 0.6, x - s * 0.7, y - s * 0.1, x - s * 0.4, y + s * 0.1);
+    ctx.bezierCurveTo(x - s * 0.6, y + s * 0.3, x - s * 0.3, y + s * 0.6, x, y + s * 0.4);
+    ctx.bezierCurveTo(x + s * 0.3, y + s * 0.6, x + s * 0.6, y + s * 0.3, x + s * 0.4, y + s * 0.1);
+    ctx.bezierCurveTo(x + s * 0.7, y - s * 0.1, x + s * 0.5, y - s * 0.6, x, y - s * 0.6);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 月牙纹镂空：剪纸中常见的半月形刀孔 */
+  function crescentCut(ctx, x, y, r, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x + r * 0.35, y, r * 0.78, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   /* ---------------- 剪纸 ---------------- */
   function drawPapercut(ctx, W, maskData, rng) {
     const { mask, core, edge } = maskData;
@@ -395,19 +577,46 @@
     // 红色剪影
     ctx.drawImage(silhouette, 0, 0);
 
-    // 内部镂空：纸雕花孔
-    punchDotFlowers(ctx, mask, W, PAPER, W * 0.034, 0.46, rng);
+    // 内部装饰层：缠枝纹 + 云纹 + 月牙纹（只落在红色剪影厚实处）
+    const deco = document.createElement("canvas");
+    deco.width = W;
+    deco.height = W;
+    const dctx = deco.getContext("2d");
 
-    // 几刀叶形镂空，破一破整块红
-    let placed = 0;
-    for (let i = 0; i < 260 && placed < 10; i++) {
-      const x = W * (0.12 + rng() * 0.76);
-      const y = W * (0.12 + rng() * 0.76);
-      if (core[Math.floor(y) * W + Math.floor(x)] < 0.5) continue;
-      const len = W * (0.03 + rng() * 0.055);
-      leafCut(ctx, x, y, len, len * 0.2, rng() * Math.PI, PAPER, 0.82);
-      placed++;
+    // 缠枝纹：从画面中心螺旋展开的卷草藤蔓
+    const cx = W * 0.5, cy = W * 0.5;
+    vineScroll(dctx, cx, cy, W * 0.32, PAPER, 0.88, 2.5);
+
+    // 云纹：四面对称分布在中心区域
+    const cloudPositions = [
+      [W * 0.32, W * 0.34], [W * 0.68, W * 0.34],
+      [W * 0.32, W * 0.66], [W * 0.68, W * 0.66]
+    ];
+    cloudPositions.forEach(([x, y]) => cloudMotif(dctx, x, y, W * 0.03, PAPER, 0.8));
+
+    // 月牙纹：沿中心环形分布的刀孔
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const rr = W * 0.16;
+      const x = cx + Math.cos(a) * rr;
+      const y = cy + Math.sin(a) * rr;
+      crescentCut(dctx, x, y, W * 0.011, PAPER, 0.75);
     }
+
+    // 如意纹：点缀在藤蔓上
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const rr = W * 0.26;
+      ruyiMotif(dctx, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, W * 0.016, PAPER, 0.7);
+    }
+
+    // 点状花孔：保留少量细密打点，增加刀工层次
+    punchDotFlowers(dctx, mask, W, PAPER, W * 0.03, 0.3, rng);
+
+    // 将装饰层限制在红色剪影厚实处
+    dctx.globalCompositeOperation = "destination-in";
+    dctx.drawImage(maskCanvas(core, W), 0, 0);
+    ctx.drawImage(deco, 0, 0);
 
     // 刀口：沿轮廓向内刻两圈纸色白线，模拟双线剪法（只落在厚实处）
     const carve = document.createElement("canvas");
@@ -433,7 +642,7 @@
     ctx.drawImage(edgeCanvas(edge, W, redDeep, 0.6), 0, 0);
     ctx.restore();
 
-    // 外框：双线 + 锯齿
+    // 外框：双线 + 回纹 + 锯齿
     const m = W * 0.042;
     ctx.save();
     ctx.strokeStyle = red;
@@ -444,9 +653,12 @@
     ctx.strokeRect(m * 1.22, m * 1.22, W - m * 2.44, W - m * 2.44);
     ctx.restore();
 
+    // 回纹内框
+    meanderBorder(ctx, m * 1.08, m * 1.08, W - m * 2.16, W - m * 2.16, red, Math.max(1, W * 0.0012), W * 0.012);
+
     sawtooth(ctx, W, m * 1.16, Math.max(9, W * 0.016), W * 0.008, red);
 
-    // 四角梅花
+    // 四角团花（八瓣层叠）
     const cs = [
       [m * 2.2, m * 2.2],
       [W - m * 2.2, m * 2.2],
@@ -454,32 +666,20 @@
       [W - m * 2.2, W - m * 2.2]
     ];
     cs.forEach(([x, y]) => {
-      flower(ctx, x, y, W * 0.021, red, 0.95);
-      ctx.save();
-      ctx.fillStyle = PAPER;
-      ctx.beginPath();
-      ctx.arc(x, y, W * 0.0055, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      medallionFlower(ctx, x, y, W * 0.028, red, 0.95, 8);
     });
 
-    // 上下团花
+    // 上下中央团花 + 缠枝连接
     for (const cy of [m * 2.6, W - m * 2.6]) {
-      flower(ctx, W / 2, cy, W * 0.019, red, 0.92);
-      ctx.save();
-      ctx.fillStyle = PAPER;
-      ctx.beginPath();
-      ctx.arc(W / 2, cy, W * 0.005, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      medallionFlower(ctx, W / 2, cy, W * 0.026, red, 0.92, 8);
       for (const dx of [-1, 1]) {
         ctx.save();
         ctx.strokeStyle = red;
-        ctx.globalAlpha = 0.55;
+        ctx.globalAlpha = 0.5;
         ctx.lineWidth = Math.max(1, W * 0.0016);
         ctx.beginPath();
         ctx.moveTo(W / 2 + dx * W * 0.032, cy);
-        ctx.lineTo(W / 2 + dx * W * 0.1, cy);
+        ctx.quadraticCurveTo(W / 2 + dx * W * 0.07, cy - W * 0.01, W / 2 + dx * W * 0.1, cy);
         ctx.stroke();
         ctx.restore();
       }
@@ -550,6 +750,31 @@
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
+    }
+    // 扎结同心圆：手工扎线留下的环形防染，是扎染最标志性的纹样
+    for (let i = 0; i < 8; i++) {
+      const tx = W * (0.12 + rng() * 0.76);
+      const ty = W * (0.12 + rng() * 0.76);
+      const tr = W * (0.02 + rng() * 0.04);
+      // 中心扎结白点
+      const kg = ctx.createRadialGradient(tx, ty, 0, tx, ty, tr);
+      kg.addColorStop(0, "rgba(232,240,236,0.55)");
+      kg.addColorStop(0.5, "rgba(232,240,236,0.18)");
+      kg.addColorStop(1, "rgba(232,240,236,0)");
+      ctx.fillStyle = kg;
+      ctx.beginPath();
+      ctx.arc(tx, ty, tr, 0, Math.PI * 2);
+      ctx.fill();
+      // 2-3 圈扎线环
+      ctx.strokeStyle = "rgba(232,240,236,0.32)";
+      ctx.lineWidth = Math.max(0.8, W * 0.0014);
+      for (let ring = 1; ring <= 3; ring++) {
+        ctx.globalAlpha = 0.4 - ring * 0.08;
+        ctx.beginPath();
+        ctx.arc(tx, ty, tr * (0.6 + ring * 0.35), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
 
@@ -637,24 +862,45 @@
     punchDotFlowers(ctx, mask, W, "#2C4E6B", W * 0.055, 0.2, rng);
     ctx.restore();
 
-    // 冰裂纹
+    // 冰裂纹：树枝状分叉网络，模拟染液在折痕间渗开的肌理
     ctx.save();
-    ctx.strokeStyle = "rgba(240,244,240,0.26)";
-    ctx.lineWidth = Math.max(0.7, W / 1200);
-    for (let i = 0; i < 30; i++) {
-      let x = rng() * W;
-      let y = rng() * W;
-      let ang = rng() * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      const steps = 10 + Math.floor(rng() * 22);
-      for (let s = 0; s < steps; s++) {
-        ang += (rng() - 0.5) * 0.9;
-        x += Math.cos(ang) * W * 0.008;
-        y += Math.sin(ang) * W * 0.008;
-        ctx.lineTo(x, y);
+    ctx.strokeStyle = "rgba(240,244,240,0.22)";
+    ctx.lineWidth = Math.max(0.6, W / 1400);
+    const crackCenters = 14;
+    for (let c = 0; c < crackCenters; c++) {
+      const sx = W * (0.1 + rng() * 0.8);
+      const sy = W * (0.1 + rng() * 0.8);
+      // 每个中心发出 2-4 条主裂纹
+      const branches = 2 + Math.floor(rng() * 3);
+      for (let b = 0; b < branches; b++) {
+        let x = sx, y = sy;
+        let ang = (b / branches) * Math.PI * 2 + rng() * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        const segs = 8 + Math.floor(rng() * 14);
+        for (let s = 0; s < segs; s++) {
+          ang += (rng() - 0.5) * 0.7;
+          const step = W * (0.006 + rng() * 0.01);
+          x += Math.cos(ang) * step;
+          y += Math.sin(ang) * step;
+          if (x < 0 || x > W || y < 0 || y > W) break;
+          ctx.lineTo(x, y);
+          // 中途分叉：30% 概率发出支裂纹
+          if (rng() < 0.3 && s > 1) {
+            const subAng = ang + (rng() > 0.5 ? 1 : -1) * (0.4 + rng() * 0.6);
+            let sx2 = x, sy2 = y;
+            ctx.moveTo(sx2, sy2);
+            for (let ss = 0; ss < 5 + rng() * 6; ss++) {
+              sx2 += Math.cos(subAng + (rng() - 0.5) * 0.4) * W * 0.006;
+              sy2 += Math.sin(subAng + (rng() - 0.5) * 0.4) * W * 0.006;
+              if (sx2 < 0 || sx2 > W || sy2 < 0 || sy2 > W) break;
+              ctx.lineTo(sx2, sy2);
+            }
+            ctx.moveTo(x, y);
+          }
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
     }
     ctx.restore();
 
@@ -735,31 +981,46 @@
     ctx.drawImage(rim, 0, -rs);
 
     // 传统点状花孔：让白色纹样透气
-    punchDotFlowers(ctx, mask, W, indigo, W * 0.03, 0.5, rng);
+    punchDotFlowers(ctx, mask, W, indigo, W * 0.03, 0.4, rng);
 
-    // 冰裂纹（白色细线，断续）
+    // 缠枝纹 + 云纹：在白色纹样内部叠加靛色卷草，增加刻版层次
+    const calicoDeco = document.createElement("canvas");
+    calicoDeco.width = W;
+    calicoDeco.height = W;
+    const cdctx = calicoDeco.getContext("2d");
+    vineScroll(cdctx, W * 0.5, W * 0.5, W * 0.3, indigo, 0.7, 2);
+    cloudMotif(cdctx, W * 0.35, W * 0.35, W * 0.025, indigo, 0.6);
+    cloudMotif(cdctx, W * 0.65, W * 0.35, W * 0.025, indigo, 0.6);
+    cloudMotif(cdctx, W * 0.35, W * 0.65, W * 0.025, indigo, 0.6);
+    cloudMotif(cdctx, W * 0.65, W * 0.65, W * 0.025, indigo, 0.6);
+    cdctx.globalCompositeOperation = "destination-in";
+    cdctx.drawImage(maskCanvas(mask, W), 0, 0);
+    ctx.drawImage(calicoDeco, 0, 0);
+
+    // 冰裂纹（靛色断续细线，模拟防染石灰龟裂）
     ctx.save();
-    ctx.strokeStyle = "rgba(243,238,223,0.2)";
+    ctx.strokeStyle = indigo;
+    ctx.globalAlpha = 0.18;
     ctx.lineWidth = Math.max(0.6, W / 1500);
-    for (let i = 0; i < 34; i++) {
+    for (let i = 0; i < 28; i++) {
       let x = rng() * W;
       let y = rng() * W;
       let ang = rng() * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      const steps = 6 + Math.floor(rng() * 18);
+      const steps = 6 + Math.floor(rng() * 16);
       for (let s = 0; s < steps; s++) {
-        ang += (rng() - 0.5) * 1.1;
-        x += Math.cos(ang) * W * 0.006;
-        y += Math.sin(ang) * W * 0.006;
-        if (s % 4 === 0) ctx.moveTo(x, y);
+        ang += (rng() - 0.5) * 1.0;
+        x += Math.cos(ang) * W * 0.007;
+        y += Math.sin(ang) * W * 0.007;
+        if (s % 3 === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
     }
     ctx.restore();
 
-    // 白色边框
+    // 白色边框 + 回纹
     const m = W * 0.045;
     ctx.save();
     ctx.strokeStyle = "rgba(243,238,223,0.9)";
@@ -768,6 +1029,8 @@
     ctx.lineWidth = Math.max(0.7, W * 0.0012);
     ctx.strokeRect(m * 1.18, m * 1.18, W - m * 2.36, W - m * 2.36);
     ctx.restore();
+
+    meanderBorder(ctx, m * 1.06, m * 1.06, W - m * 2.12, W - m * 2.12, "rgba(243,238,223,0.5)", Math.max(0.8, W * 0.001), W * 0.012);
 
     // 边框重复小花
     const step = W * 0.055;
@@ -781,18 +1044,18 @@
       flower(ctx, W - m * 1.6, y, mr, "rgba(243,238,223,0.94)", 1);
     }
 
-    // 四角团花
+    // 四角层叠团花
     const cm = W * 0.098;
     const corners = [
       [cm, cm], [W - cm, cm], [cm, W - cm], [W - cm, W - cm]
     ];
     corners.forEach(([x, y]) => {
-      flower(ctx, x, y, W * 0.024, "rgba(243,238,223,0.95)", 1);
+      medallionFlower(ctx, x, y, W * 0.03, "rgba(243,238,223,0.95)", 1, 8);
       ctx.save();
-      ctx.strokeStyle = "rgba(243,238,223,0.6)";
+      ctx.strokeStyle = "rgba(243,238,223,0.5)";
       ctx.lineWidth = Math.max(0.8, W * 0.0012);
       ctx.beginPath();
-      ctx.arc(x, y, W * 0.036, 0, Math.PI * 2);
+      ctx.arc(x, y, W * 0.045, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     });
@@ -861,13 +1124,34 @@
     }
     ctx.putImageData(id, 0, 0);
 
+    // 竹节：每根竹篾上的环状节疤，是竹编最真实的辨识特征
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    ctx.strokeStyle = "#5C4526";
+    ctx.lineWidth = Math.max(1, W * 0.0014);
+    const nodeGap = cell * 4.5;
+    for (let y = nodeGap; y < W; y += nodeGap) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.bezierCurveTo(W * 0.25, y + cell * 0.15, W * 0.75, y - cell * 0.15, W, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.22;
+    for (let x = nodeGap; x < W; x += nodeGap) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.bezierCurveTo(x + cell * 0.15, W * 0.25, x - cell * 0.15, W * 0.75, x, W);
+      ctx.stroke();
+    }
+    ctx.restore();
+
     // 纹样边缘：浅竹色勾一道光，让形状读得出来
     ctx.save();
     ctx.globalAlpha = 0.22;
     ctx.drawImage(edgeCanvas(edge, W, "#F4E3BE", 0.9), 0, 0);
     ctx.restore();
 
-    // 收边：三股辫
+    // 收边：双线 + 回纹
     const m = W * 0.042;
     ctx.save();
     ctx.strokeStyle = "#6F552F";
@@ -877,6 +1161,8 @@
     ctx.lineWidth = Math.max(0.8, W * 0.0014);
     ctx.strokeRect(m * 1.04, m * 1.04, W - m * 2.08, W - m * 2.08);
     ctx.restore();
+
+    meanderBorder(ctx, m * 1.08, m * 1.08, W - m * 2.16, W - m * 2.16, "rgba(111,85,47,0.6)", Math.max(0.8, W * 0.001), W * 0.013);
 
     // 四角编结
     ctx.save();

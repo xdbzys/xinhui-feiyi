@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=56dd97d">
+<link rel="stylesheet" href="assets/css/style.css?v=265cebe">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -354,6 +354,7 @@
           <div class="craft-frame">
             <canvas id="craftCanvas" width="1024" height="1024" aria-label="非遗风格图样预览"></canvas>
             <canvas id="aiCraftCanvas" width="1024" height="1024" hidden aria-label="AI 二创非遗作品"></canvas>
+            <img id="aiCraftImg" alt="AI 二创非遗作品" hidden>
             <span class="craft-badge" id="craftBadge">非遗剪纸</span>
             <div class="craft-loading" id="craftLoading" hidden><i></i><span>正在重织纹样…</span></div>
             <div class="ai-craft-empty" id="aiCraftEmpty" hidden>
@@ -595,19 +596,19 @@
       <button class="btn btn-ghost btn-small" id="resetKey" type="button">恢复默认</button>
     </div>
     <p class="modal-status" id="aiStatus">状态：未测试</p>
-    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4-Flash（文本）· CogView-3-Flash（图像）。<br>完整 AI 体验需要在本机运行 <code>node tools/relay.mjs</code>；浏览器若弹出「访问本地网络」请选择允许。未启动中继时会自动使用本地心象引擎。</p>
+    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4-Flash（文本）· CogView-3-Flash（图像）。<br>AI 二创（非遗重绘）可直接使用；文本分析在云端不可用时自动切换本地心象引擎，体验一致。</p>
   </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=56dd97d"></script>
-<script src="assets/js/paint.js?v=56dd97d"></script>
-<script src="assets/js/analyze.js?v=56dd97d"></script>
-<script src="assets/js/craft.js?v=56dd97d"></script>
-<script src="assets/js/knowledge.js?v=56dd97d"></script>
-<script src="assets/js/ai.js?v=56dd97d"></script>
-<script src="assets/js/report.js?v=56dd97d"></script>
-<script src="assets/js/app.js?v=56dd97d"></script>
+<script src="assets/js/config.js?v=265cebe"></script>
+<script src="assets/js/paint.js?v=265cebe"></script>
+<script src="assets/js/analyze.js?v=265cebe"></script>
+<script src="assets/js/craft.js?v=265cebe"></script>
+<script src="assets/js/knowledge.js?v=265cebe"></script>
+<script src="assets/js/ai.js?v=265cebe"></script>
+<script src="assets/js/report.js?v=265cebe"></script>
+<script src="assets/js/app.js?v=265cebe"></script>
 </body>
 </html>

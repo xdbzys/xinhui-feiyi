@@ -57,39 +57,48 @@
     if (!key) throw new Error("缺少 API Key");
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout || 60000);
-    let res;
-    let url = "";
-    try {
-      // 纯静态部署下，浏览器直接跨域调用智谱 API。
-      // Authorization 头会触发 CORS 预检（智谱预检不返回 CORS 头），
-      // 因此把鉴权放进 query string，换取可用的跨域 POST。
-      const full = AI.base + path + (path.indexOf("?") >= 0 ? "&" : "?") +
-        "Authorization=" + encodeURIComponent("Bearer " + key);
-      const relay = (AI.relay || "").trim();
-      url = relay ? relay.replace("{url}", encodeURIComponent(full)) : full;
-      res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: ctrl.signal
-      });
-    } catch (e) {
-      clearTimeout(timer);
-      if (e && e.name === "AbortError") throw new Error("AI 响应超时");
-      console.warn("[心绘非遗] AI 请求失败", e && e.name, e && e.message, url.slice(0, 120));
-      throw new Error("网络连接失败：请确认已运行 node tools/relay.mjs，并允许浏览器访问本地网络");
+
+    // 鉴权放 query string（避免 Authorization 头触发预检）
+    const full = AI.base + path + (path.indexOf("?") >= 0 ? "&" : "?") +
+      "Authorization=" + encodeURIComponent("Bearer " + key);
+    const relay = (AI.relay || "").trim();
+
+    // 尝试顺序：直连 → 中继（如果配置了）
+    // images/generations 支持 CORS 可直连；chat/completions 不支持预检，
+    // 直连会因 CORS 失败，此时走中继；中继也不可用时调用方降级到本地引擎。
+    const attempts = [];
+    attempts.push({ url: full, label: "直连" });
+    if (relay) attempts.push({ url: relay.replace("{url}", encodeURIComponent(full)), label: "中继" });
+
+    let lastErr = null;
+    for (const attempt of attempts) {
+      try {
+        const res = await fetch(attempt.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+        if (!res.ok) {
+          const msg = (data && data.error && (data.error.message || data.error.code)) ||
+            (data && data.message) || ("HTTP " + res.status);
+          const err = new Error(msg);
+          err.status = res.status;
+          throw err;
+        }
+        return data;
+      } catch (e) {
+        lastErr = e;
+        if (e && e.name === "AbortError") break;
+        console.warn("[心绘非遗] " + attempt.label + " 请求失败", e && e.message);
+      }
     }
     clearTimeout(timer);
-    let data = null;
-    try { data = await res.json(); } catch (e) { data = null; }
-    if (!res.ok) {
-      const msg = (data && data.error && (data.error.message || data.error.code)) ||
-        (data && data.message) || ("HTTP " + res.status);
-      const err = new Error(msg);
-      err.status = res.status;
-      throw err;
-    }
-    return data;
+    if (lastErr && lastErr.name === "AbortError") throw new Error("AI 响应超时");
+    throw new Error("AI 服务暂不可用，已切换本地心象引擎");
   }
 
   async function chat(messages, opts) {
