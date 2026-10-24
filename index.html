@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>心绘非遗 · 基于 AI 绘画心理投射的疗愈文创生成系统</title>
+<meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
+<meta name="theme-color" content="#F7F2E8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="site-header" id="siteHeader">
+  <div class="wrap header-inner">
+    <a class="brand" href="#top" aria-label="心绘非遗首页">
+      <span class="seal" aria-hidden="true">心绘</span>
+      <span class="brand-text"><strong>心绘非遗</strong><em>XINHUI · FEIYI</em></span>
+    </a>
+    <nav class="site-nav" aria-label="主导航">
+      <a href="#step1">心象作画</a>
+      <a href="#step2">心象解码</a>
+      <a href="#step3">非遗重构</a>
+      <a href="#step4">心愈手作</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="aiSettingsBtn" title="AI 设置" aria-label="AI 设置">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+      </button>
+      <a class="btn btn-small" href="#step1">开始体验</a>
+    </div>
+  </div>
+  <div class="scroll-progress" aria-hidden="true"><i id="progressBar"></i></div>
+</header>
+
+<main id="top">
+
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="hero-art" aria-hidden="true">
+      <div class="hero-sun"></div>
+      <svg class="mountains" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMax slice">
+        <defs>
+          <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#40525a" stop-opacity=".05"/>
+            <stop offset="1" stop-color="#40525a" stop-opacity=".20"/>
+          </linearGradient>
+          <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2b3c44" stop-opacity=".10"/>
+            <stop offset="1" stop-color="#2b3c44" stop-opacity=".32"/>
+          </linearGradient>
+          <linearGradient id="m3" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#1e2c33" stop-opacity=".22"/>
+            <stop offset="1" stop-color="#1e2c33" stop-opacity=".55"/>
+          </linearGradient>
+          <filter id="inkBlur"><feGaussianBlur stdDeviation="10"/></filter>
+        </defs>
+        <path fill="url(#m1)" filter="url(#inkBlur)" d="M-40 690 C 120 600 220 640 330 560 C 450 472 520 520 620 470 C 740 410 820 500 930 486 C 1070 468 1150 560 1250 520 C 1330 488 1400 540 1480 500 L 1480 920 L -40 920 Z"/>
+        <path fill="url(#m2)" d="M-40 760 C 90 700 200 740 330 660 C 430 598 520 636 640 580 C 760 524 850 590 960 566 C 1080 540 1180 620 1290 584 C 1370 558 1430 596 1480 570 L 1480 920 L -40 920 Z"/>
+        <path fill="url(#m3)" d="M-40 860 C 110 810 230 846 350 786 C 480 720 570 768 700 720 C 820 676 930 736 1040 706 C 1170 670 1270 738 1480 700 L 1480 920 L -40 920 Z"/>
+        <path fill="none" stroke="#2b3c44" stroke-opacity=".16" stroke-width="1.2" d="M-40 780 C 120 730 220 764 340 704 C 460 644 560 690 690 640 C 820 590 950 650 1080 618 C 1210 586 1340 640 1480 610"/>
+      </svg>
+      <div class="mist mist-1"></div>
+      <div class="mist mist-2"></div>
+    </div>
+
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-line"></span>大学生创新项目 · AI × 心理 × 非遗</p>
+        <h1><span class="ink">心绘</span><span class="red">非遗</span></h1>
+        <p class="hero-sub">以笔迹为舟，驶入心里的山水。</p>
+        <p class="hero-desc">画下闭上眼睛后最舒服的地方，让 AI 读懂色彩、线条与留白，再把它重绘成一件可以亲手完成的非遗作品。</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#step1"><span>开始心象作画</span><i>→</i></a>
+          <a class="btn btn-ghost" href="#flow">看看它如何发生</a>
+        </div>
+        <ul class="hero-meta">
+          <li><strong>4</strong><span>步疗愈闭环</span></li>
+          <li><strong>4</strong><span>种非遗工艺</span></li>
+          <li><strong>0</strong><span>绘画门槛</span></li>
+        </ul>
+      </div>
+      <aside class="hero-poem" aria-hidden="true">
+        <p>闭眼，看见<br>心里的山水</p>
+        <span class="poem-seal">心象</span>
+      </aside>
+    </div>
+    <div class="hero-scroll" aria-hidden="true"><span></span>向下 · 让心绪落笔</div>
+  </section>
+
+  <!-- ================= FLOW ================= -->
+  <section class="flow" id="flow">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="chapter-mark">序</span>
+        <div>
+          <p class="kicker">THE FOURFOLD PATH</p>
+          <h2>从一笔心绪，到一件非遗</h2>
+          <p class="lead">我们把艺术治疗中的「投射」方法、生成式 AI 与非遗纹样语法连接起来，形成一条可体验、可带走、可亲手完成的疗愈路径。</p>
+        </div>
+      </div>
+      <div class="flow-grid">
+        <article class="flow-card reveal">
+          <span class="flow-no">壹</span>
+          <h3>心象作画</h3>
+          <p>闭眼，画下最舒服的地方。颜色、线条、留白，都是潜意识正在说的话。</p>
+          <span class="flow-en">DRAW</span>
+        </article>
+        <article class="flow-card reveal">
+          <span class="flow-no">贰</span>
+          <h3>心象解码</h3>
+          <p>AI 观察色彩温度、线条张力与空间留白，结合你的自述，生成《专属心灵图鉴》。</p>
+          <span class="flow-en">READ</span>
+        </article>
+        <article class="flow-card reveal">
+          <span class="flow-no">叁</span>
+          <h3>非遗重构</h3>
+          <p>提取画面元素，以剪纸、扎染、蓝印花布、竹编的纹样语法，重新讲述你的心象。</p>
+          <span class="flow-en">REWEAVE</span>
+        </article>
+        <article class="flow-card reveal">
+          <span class="flow-no">肆</span>
+          <h3>心愈手作</h3>
+          <p>下载图样，跟随正念手作指南，让疗愈真正发生在手指与材料相遇的那一刻。</p>
+          <span class="flow-en">MAKE</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= STEP 1 ================= -->
+  <section class="chapter" id="step1">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="chapter-mark">壹</span>
+        <div>
+          <p class="kicker">STEP 01 · 心象作画</p>
+          <h2>闭上眼睛，画下最舒服的地方</h2>
+          <p class="lead">不用在意像不像。选一个让你放松的颜色，慢慢画。你落下的每一笔，都是此刻的心象。</p>
+        </div>
+      </div>
+
+      <div class="studio">
+        <div class="canvas-column reveal">
+          <div class="canvas-frame">
+            <div class="canvas-head">
+              <span>画案 · 960 × 640</span>
+              <span class="live-dot"><i></i>心象记录中</span>
+            </div>
+            <div class="canvas-wrap" id="canvasWrap">
+              <canvas id="paintCanvas" width="1920" height="1280" aria-label="绘画画布"></canvas>
+              <div class="canvas-empty" id="canvasEmpty">
+                <span class="empty-ring"></span>
+                <strong>落笔即心</strong>
+                <small>按住鼠标或手指，慢慢画</small>
+              </div>
+              <div class="scan-layer" id="scanLayer" aria-hidden="true"><i></i></div>
+            </div>
+            <div class="toolbar">
+              <div class="tool-group tools" role="group" aria-label="画笔类型">
+                <button type="button" class="tool active" data-tool="line" title="细线：清晰、克制的笔触">细线</button>
+                <button type="button" class="tool" data-tool="soft" title="涂抹：柔和、晕染的色块">涂抹</button>
+                <button type="button" class="tool" data-tool="dot" title="点彩：一点一点落下颜色">点彩</button>
+                <button type="button" class="tool" data-tool="eraser" title="橡皮：擦去笔触">橡皮</button>
+              </div>
+              <div class="tool-group colors" id="palette" role="group" aria-label="颜色"></div>
+              <div class="tool-group size-group">
+                <label for="sizeRange">笔触</label>
+                <input id="sizeRange" type="range" min="2" max="40" value="8" aria-label="笔触粗细">
+                <span id="sizeLabel">8</span>
+              </div>
+              <div class="tool-group history">
+                <button type="button" id="undoBtn" title="撤销">撤销</button>
+                <button type="button" id="redoBtn" title="重做" disabled>重做</button>
+                <button type="button" id="clearBtn" title="清空画布">清空</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="studio-side">
+          <div class="prompt-card reveal">
+            <p class="kicker red">现在就画</p>
+            <h3>哪里，让你觉得<br>最安全、最舒服？</h3>
+            <p>可以是真实去过的地方，也可以只在想象里。先画大块的颜色，再补上细节。</p>
+            <div class="hint-chips" id="hintChips" role="group" aria-label="灵感提示">
+              <button type="button">一片海</button>
+              <button type="button">山间小屋</button>
+              <button type="button">一棵树</button>
+              <button type="button">一扇窗</button>
+              <button type="button">一片星空</button>
+            </div>
+          </div>
+
+          <div class="text-card reveal">
+            <label for="moodText">如果愿意，用一句话说说它</label>
+            <textarea id="moodText" maxlength="200" placeholder="那里有风，黄昏是橘色的，我一个人坐在树下……"></textarea>
+            <div class="text-meta"><span>选填 · 会让解读更贴近你</span><span id="charCount">0 / 200</span></div>
+          </div>
+
+          <button id="analyzeBtn" class="btn btn-primary btn-wide" type="button">
+            <span>让 AI 读一读这幅画</span><i>→</i>
+          </button>
+          <p class="privacy-note">画作仅用于本次分析。发送给 AI 前会压缩为 768px 的图像，不上传原图。</p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= STEP 2 ================= -->
+  <section class="chapter chapter-dark" id="step2">
+    <div class="wrap">
+      <div class="section-head reveal light">
+        <span class="chapter-mark">贰</span>
+        <div>
+          <p class="kicker">STEP 02 · 心象解码</p>
+          <h2>我们不贴标签，只把线索翻译成你</h2>
+          <p class="lead">色彩的温度、线条的张力、留白的多少，都是心象的语法。AI 与本地视觉算法共同阅读它，生成一份温柔的《专属心灵图鉴》。</p>
+        </div>
+      </div>
+
+      <div class="analysis-shell" id="analysisShell">
+        <div class="analysis-idle" id="analysisIdle">
+          <span class="idle-mark">象</span>
+          <h3>等待你的心象</h3>
+          <p>完成第一幕的画作后，色彩、线条与留白会在这里被读成一份只属于你的图鉴。</p>
+          <a class="btn btn-ghost light" href="#step1">去画一幅 →</a>
+        </div>
+        <div class="analysis-loading" id="analysisLoading" hidden>
+          <div class="ink-orb" aria-hidden="true"><i></i><i></i><i></i><span></span></div>
+          <p class="loading-title" id="loadingTitle">AI 正在读你的笔触</p>
+          <ul class="loading-steps" id="loadingSteps">
+            <li data-stage="local"><span></span>提取色彩、线条与空间坐标</li>
+            <li data-stage="vision"><span></span>请智谱 GLM-4V 观察画面元素</li>
+            <li data-stage="report"><span></span>撰写《专属心灵图鉴》</li>
+            <li data-stage="craft"><span></span>匹配非遗纹样语法</li>
+          </ul>
+          <p class="loading-note" id="loadingNote">第一次分析大约需要 10–30 秒，请保持呼吸。</p>
+        </div>
+
+        <div class="analysis-result" id="analysisResult" hidden>
+          <div class="analysis-top">
+            <div class="radar-card">
+              <div class="radar-wrap" id="radarWrap"></div>
+              <p class="radar-caption">六维心象 · SIX DIMENSIONS</p>
+            </div>
+            <div class="analysis-summary">
+              <div class="badge-row">
+                <span class="badge" id="engineBadge">智谱 GLM-4V</span>
+                <span class="badge ghost" id="localBadge">本地视觉算法</span>
+              </div>
+              <h3 id="archetype">「静海孤舟」</h3>
+              <p class="summary-text" id="summaryText"></p>
+              <div class="tags" id="elementTags"></div>
+              <div class="palette-strip" id="colorStrip" aria-label="画面主色"></div>
+              <p class="micro" id="visionNote"></p>
+            </div>
+          </div>
+
+          <div class="dimension-grid" id="dimensionGrid"></div>
+
+          <div class="language-grid">
+            <article class="language-card">
+              <span class="lang-no">01</span>
+              <h4>色彩语言</h4>
+              <p id="colorNarrative"></p>
+            </article>
+            <article class="language-card">
+              <span class="lang-no">02</span>
+              <h4>线条语言</h4>
+              <p id="lineNarrative"></p>
+            </article>
+            <article class="language-card">
+              <span class="lang-no">03</span>
+              <h4>空间语言</h4>
+              <p id="spaceNarrative"></p>
+            </article>
+          </div>
+
+          <div class="analysis-actions">
+            <button id="toCraftBtn" class="btn btn-primary" type="button"><span>让它长成一件非遗</span><i>→</i></button>
+            <button id="redrawBtn" class="btn btn-ghost light" type="button">再画一幅</button>
+            <button id="openReportBtn" class="btn btn-ghost light" type="button">先看完整图鉴</button>
+          </div>
+          <p class="disclaimer">本图鉴基于艺术表达与心理科普框架，仅供自我觉察，不构成医学诊断或治疗建议。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= STEP 3 ================= -->
+  <section class="chapter" id="step3">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="chapter-mark">叁</span>
+        <div>
+          <p class="kicker">STEP 03 · 非遗重构</p>
+          <h2>让心里的风景，长成一件非遗</h2>
+          <p class="lead">AI 不复制你的画，而是理解它：提取元素、拆解形态，再用另一种古老的手艺重新讲述。</p>
+        </div>
+      </div>
+
+      <div class="craft-shell reveal">
+        <div class="craft-tabs" id="craftTabs" role="tablist" aria-label="选择非遗工艺">
+          <button class="craft-tab active" data-style="papercut" role="tab" aria-selected="true">
+            <i class="swatch swatch-papercut"></i><strong>剪纸</strong><em>红纸镂空</em>
+          </button>
+          <button class="craft-tab" data-style="tiedye" role="tab" aria-selected="false">
+            <i class="swatch swatch-tiedye"></i><strong>扎染</strong><em>靛蓝晕染</em>
+          </button>
+          <button class="craft-tab" data-style="calico" role="tab" aria-selected="false">
+            <i class="swatch swatch-calico"></i><strong>蓝印花布</strong><em>白花靛底</em>
+          </button>
+          <button class="craft-tab" data-style="bamboo" role="tab" aria-selected="false">
+            <i class="swatch swatch-bamboo"></i><strong>竹编</strong><em>经纬交织</em>
+          </button>
+        </div>
+
+        <div class="craft-stage">
+          <div class="craft-frame">
+            <canvas id="craftCanvas" width="1024" height="1024" aria-label="非遗风格图样预览"></canvas>
+            <span class="craft-badge" id="craftBadge">非遗剪纸</span>
+            <div class="craft-loading" id="craftLoading" hidden><i></i><span>正在重织纹样…</span></div>
+          </div>
+          <aside class="craft-info">
+            <p class="kicker red">REWEAVE</p>
+            <h3 id="craftName">非遗剪纸 · 红纸镂空</h3>
+            <p id="craftDesc">以你的笔触为刀路，保留轮廓与呼吸感，再用锯齿纹、云纹与角花收边，让心象成为一张可以真正剪下来的红纸。</p>
+            <dl class="craft-facts" id="craftFacts">
+              <div><dt>元素提取</dt><dd id="craftElements">等待分析</dd></div>
+              <div><dt>纹样语法</dt><dd id="craftGrammar">轮廓 · 镂空 · 对称</dd></div>
+              <div><dt>适合手作</dt><dd id="craftUse">剪纸 / 窗花 / 帆布袋印花</dd></div>
+            </dl>
+            <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
+            <div class="craft-actions">
+              <button id="downloadPattern" class="btn btn-primary" type="button"><span>下载 2048px 图样</span><i>↓</i></button>
+              <button id="aiRedraw" class="btn btn-ghost" type="button">AI 重绘灵感稿</button>
+            </div>
+            <div class="ai-art" id="aiArt" hidden>
+              <img id="aiArtImg" alt="智谱 CogView 生成的非遗灵感稿">
+              <div class="ai-art-meta"><span>智谱 CogView · 灵感稿</span><a id="aiArtDownload" target="_blank" rel="noopener">打开原图 ↗</a></div>
+            </div>
+            <button id="toGuide" class="link-btn" type="button">带着这张图样，进入心愈手作 →</button>
+          </aside>
+        </div>
+
+        <div class="mapping-row">
+          <div class="mapping-step"><span>提取</span><p>识别海、树、太阳等画面元素与主色</p></div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-step"><span>转译</span><p>映射为镂空、晕染、冰裂、经纬的纹样语法</p></div>
+          <div class="mapping-arrow">→</div>
+          <div class="mapping-step"><span>落地</span><p>输出可打印、可剪裁、可再创作的非遗底稿</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= STEP 4 ================= -->
+  <section class="chapter chapter-warm" id="step4">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="chapter-mark">肆</span>
+        <div>
+          <p class="kicker">STEP 04 · 心愈手作</p>
+          <h2>疗愈，发生在手指与材料相遇时</h2>
+          <p class="lead">图样只是开始。真正让心慢下来的，是剪下一刀、系上一结、染上一遍蓝的那些时刻。</p>
+        </div>
+      </div>
+
+      <div class="guide-shell reveal">
+        <div class="guide-main">
+          <div class="guide-head">
+            <div class="guide-craft" id="guideCraft">剪纸</div>
+            <div>
+              <h3 id="guideTitle">《心愈手作指南》</h3>
+              <p id="guideIntro"></p>
+            </div>
+          </div>
+
+          <div class="guide-block">
+            <h4>准备这些</h4>
+            <ul class="materials" id="guideMaterials"></ul>
+          </div>
+
+          <div class="guide-block">
+            <h4>跟着做，也别忘了呼吸</h4>
+            <ol class="guide-steps" id="guideSteps"></ol>
+          </div>
+
+          <blockquote class="mantra" id="guideMantra"></blockquote>
+
+          <div class="guide-actions">
+            <button id="printGuide" class="btn btn-primary" type="button">打印 / 保存为 PDF</button>
+            <button id="downloadGuide" class="btn btn-ghost" type="button">下载文本指南</button>
+            <button id="openReportBtn2" class="btn btn-ghost" type="button">查看完整心灵图鉴</button>
+          </div>
+        </div>
+
+        <aside class="mockup">
+          <div class="mockup-stage" id="mockupTote">
+            <div class="tote">
+              <span class="tote-handle"></span>
+              <div class="tote-body" id="totePattern"></div>
+            </div>
+          </div>
+          <div class="mockup-switch" id="mockupSwitch" role="group" aria-label="应用预览">
+            <button class="active" data-mock="tote">帆布袋</button>
+            <button data-mock="frame">装裱画</button>
+            <button data-mock="card">明信片</button>
+          </div>
+          <p class="mockup-note">你的图样可以印在帆布袋上，也可以作为剪纸、刺绣、掐丝珐琅的底稿。所有图样均可下载后自行打印。</p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CLOSING ================= -->
+  <section class="closing">
+    <div class="wrap closing-inner reveal">
+      <p class="kicker">YOUR INNER LANDSCAPE</p>
+      <h2>你的心象，<br>值得被看见，也值得被触摸。</h2>
+      <p>带走一张图样，完成一件手作。把它挂在窗前，或送给此刻需要被安慰的人。</p>
+      <div class="closing-actions">
+        <button id="openReportBtn3" class="btn btn-primary" type="button"><span>打开我的《心灵图鉴》</span><i>→</i></button>
+        <a class="btn btn-ghost" href="#step1">重新画一幅</a>
+      </div>
+    </div>
+    <div class="closing-art" aria-hidden="true">
+      <svg viewBox="0 0 1440 320" preserveAspectRatio="xMidYMax slice">
+        <path fill="#2b3c44" fill-opacity=".08" d="M0 250 C 180 190 320 240 470 200 C 620 160 760 220 910 180 C 1060 140 1220 210 1440 170 L 1440 320 L 0 320 Z"/>
+        <path fill="#1e2c33" fill-opacity=".16" d="M0 290 C 200 240 340 280 520 250 C 700 220 860 270 1040 240 C 1220 210 1340 260 1440 240 L 1440 320 L 0 320 Z"/>
+      </svg>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-brand">
+      <span class="seal small">心绘</span>
+      <div><strong>心绘非遗</strong><p>基于 AI 绘画心理投射的疗愈文创生成系统</p></div>
+    </div>
+    <div class="footer-meta">
+      <p>AI 视觉：智谱 GLM-4V / GLM-4 / CogView</p>
+      <p>非遗工艺：剪纸 · 扎染 · 蓝印花布 · 竹编</p>
+    </div>
+    <p class="footer-note">本项目为大学生创新竞赛概念验证作品。心理分析仅供自我觉察，不替代专业心理咨询。</p>
+  </div>
+</footer>
+
+<!-- ================= REPORT OVERLAY ================= -->
+<div class="report-overlay" id="reportOverlay" hidden>
+  <div class="report-toolbar">
+    <button class="btn btn-small" id="printReport" type="button">打印 / 保存 PDF</button>
+    <button class="btn btn-small ghost-light" id="downloadReportPattern" type="button">下载图样</button>
+    <button class="icon-btn light" id="closeReport" aria-label="关闭图鉴" title="关闭">✕</button>
+  </div>
+  <div class="report-scroll">
+    <article class="report-paper" id="reportPaper">
+      <header class="report-cover">
+        <div class="report-brand"><span class="seal small">心绘</span><span>心绘非遗 · XINHUI FEIYI</span></div>
+        <p class="report-kicker">EXCLUSIVE INNER PORTRAIT</p>
+        <h2>专属心灵图鉴</h2>
+        <p class="report-archetype" id="reportArchetype">「静海孤舟」</p>
+        <div class="report-meta">
+          <span id="reportDate"></span><span>编号 <b id="reportNo">XHFY-0000</b></span>
+        </div>
+        <div class="report-seal" aria-hidden="true">心象</div>
+      </header>
+
+      <section class="report-section report-overview">
+        <div class="report-visual">
+          <div class="report-drawing"><img id="reportDrawing" alt="用户心象画作"></div>
+          <div class="report-radar" id="reportRadar"></div>
+        </div>
+        <div class="report-summary">
+          <h3>心象提要</h3>
+          <p id="reportSummary"></p>
+          <div class="report-tags" id="reportTags"></div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h3><span>01</span>色彩的语言</h3>
+        <p id="reportColor"></p>
+        <div class="report-palette" id="reportPalette"></div>
+      </section>
+
+      <section class="report-section">
+        <h3><span>02</span>线条与张力</h3>
+        <p id="reportLine"></p>
+      </section>
+
+      <section class="report-section">
+        <h3><span>03</span>空间与留白</h3>
+        <p id="reportSpace"></p>
+      </section>
+
+      <section class="report-section report-craft">
+        <h3><span>04</span>你的非遗心象</h3>
+        <div class="report-craft-grid">
+          <figure class="report-pattern"><img id="reportPattern" alt="专属非遗图样"><figcaption id="reportCraftName">非遗剪纸</figcaption></figure>
+          <div class="report-craft-copy">
+            <p id="reportCraftReason"></p>
+            <dl class="report-facts" id="reportFacts"></dl>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section report-guide">
+        <h3><span>05</span>心愈手作指南</h3>
+        <p class="report-guide-intro" id="reportGuideIntro"></p>
+        <ol id="reportGuideSteps"></ol>
+        <blockquote id="reportMantra"></blockquote>
+      </section>
+
+      <footer class="report-footer">
+        <p>本图鉴由「心绘非遗」系统生成。AI 分析基于艺术治疗中的投射与色彩心理学框架，仅供自我觉察，不构成医学诊断。</p>
+        <p>心绘非遗 · 让心象被看见，也被触摸</p>
+      </footer>
+    </article>
+  </div>
+</div>
+
+<!-- ================= AI SETTINGS ================= -->
+<div class="modal" id="aiModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
+    <button class="modal-close" id="closeAiModal" aria-label="关闭">✕</button>
+    <p class="kicker red">AI CONNECTION</p>
+    <h3 id="aiModalTitle">智谱 AI 连接</h3>
+    <p class="modal-desc">网站默认使用项目内置的智谱 Key。如果额度用尽，你可以填入自己的 Key，仅保存在本机浏览器中。</p>
+    <label class="field">
+      <span>API Key</span>
+      <input id="apiKeyInput" type="password" placeholder="xxxxxxxx.xxxxxxxx" autocomplete="off">
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-small" id="saveKey" type="button">保存并测试</button>
+      <button class="btn btn-ghost btn-small" id="resetKey" type="button">恢复默认</button>
+    </div>
+    <p class="modal-status" id="aiStatus">状态：未测试</p>
+    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4-Flash（文本）· CogView-3-Flash（图像）。</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/paint.js"></script>
+<script src="assets/js/analyze.js"></script>
+<script src="assets/js/craft.js"></script>
+<script src="assets/js/ai.js"></script>
+<script src="assets/js/report.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
