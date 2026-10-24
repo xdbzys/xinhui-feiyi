@@ -101,6 +101,7 @@
   function lineNarrative(analysis) {
     const s = analysis.scores;
     const st = analysis.strokeStats;
+    const htp = analysis.htp || {};
     let t = "";
     if (s.tension > 64) {
       t = "线条偏紧，边缘清晰，落笔的速度可能不慢。紧绷有时是身体在替你撑住什么，也可能只是你太想把它画准。" +
@@ -110,6 +111,11 @@
     } else {
       t = "线条不疾不徐，既有边界，也留了余地。你在控制与放手之间，找到了一个还算舒服的位置。";
     }
+    if (htp.lineDirection === "水平为主") t += "画面里横向的线比较多，像是在稳稳地托住什么。";
+    else if (htp.lineDirection === "垂直为主") t += "画面里竖向的线比较多，有一股向上的劲儿。";
+    if (htp.repeated) t += "有些地方你来回涂了好几遍——反复出现的地方，往往藏着你最想安放的东西。";
+    if (htp.pressure === "笔触浓重") t += "笔触落得很重，说明你投入的情感浓度很高。";
+    else if (htp.pressure === "笔触轻淡") t += "笔触很轻，像是怕惊动什么，也像在给自己留余地。";
     if (st.strokes >= 12) t += "你落笔很多次，像是在一点一点确认这块地方真的属于你。";
     else if (st.strokes <= 3 && st.strokes > 0) t += "你只用了很少的笔触，果断，也保留了余地。";
     return t;
@@ -129,6 +135,11 @@
     }
     if (s.grounded > 62) t += "重心落在画面下方，你似乎在寻找一个能踩住的地方，而你已经找到了它。";
     else if (analysis.placement === "重心上浮") t += "重心偏上，你的注意力更多在远处，在还没有发生的地方。";
+    const htp = analysis.htp || {};
+    if (htp.horizBias === "偏左") t += "画面的重心偏左，像是在从过去里拿一点东西。";
+    else if (htp.horizBias === "偏右") t += "画面的重心偏右，像是在朝未来的方向走。";
+    if (htp.sizeBias === "画面偏小") t += "整体画得比较小，表达有些克制。";
+    else if (htp.sizeBias === "画面偏大") t += "整体画得比较满，情感浓度很高。";
     return t;
   }
 

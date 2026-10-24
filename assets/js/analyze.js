@@ -279,6 +279,44 @@
         ? "重心上浮"
         : "重心居中";
 
+    // HTP 风格的派生特征，用于给 AI 与本地叙事提供可解释锚点
+    // 线条方向：orientBins 中 bin 0≈水平，bin 6≈垂直
+    let horiz = 0, vert = 0;
+    for (let b = 0; b < 12; b++) {
+      const center = (b + 0.5) * Math.PI / 12;
+      const horizV = Math.abs(Math.cos(center));   // 越接近水平，cos 越大
+      const vertV = Math.abs(Math.sin(center));    // 越接近垂直，sin 越大
+      horiz += orientBins[b] * horizV;
+      vert += orientBins[b] * vertV;
+    }
+    const lineDirection = horiz > vert * 1.25
+      ? "水平为主"
+      : vert > horiz * 1.25
+        ? "垂直为主"
+        : "方向多变";
+
+    // 笔触力度（用边缘强度 + 覆盖度近似"用力"程度）
+    const pressure = edgeStrength > 55
+      ? "笔触浓重"
+      : edgeStrength < 28
+        ? "笔触轻淡"
+        : "笔触适中";
+
+    // 反复涂抹：边缘强但色彩数量少 / 或同色重复
+    const repeated = edgeStrength > 45 && hueEntropy < 0.55 && stats.soft > 3;
+
+    // 位置倾向（结合重心与九宫格权重）
+    const horizBias = leftWeight > rightWeight + 0.06
+      ? "偏左"
+      : rightWeight > leftWeight + 0.06
+        ? "偏右"
+        : "横向居中";
+    const vertBias = topWeight > bottomWeight + 0.06
+      ? "偏上"
+      : bottomWeight > topWeight + 0.06
+        ? "偏下"
+        : "纵向居中";
+
     return {
       scores,
       metrics: {
@@ -306,6 +344,15 @@
       lineStyle,
       spaceStyle,
       placement,
+      // HTP 派生特征
+      htp: {
+        lineDirection,
+        pressure,
+        repeated,
+        horizBias,
+        vertBias,
+        sizeBias: coverage > 0.32 ? "画面偏大" : coverage < 0.07 ? "画面偏小" : "大小适中"
+      },
       strokeStats: stats,
       hasDrawing: inkCount > total * 0.002,
       imageDataURL: src.toDataURL("image/jpeg", 0.85)

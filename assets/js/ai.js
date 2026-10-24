@@ -109,6 +109,7 @@
 
   function describeAnalysis(a) {
     const s = a.scores;
+    const htp = a.htp || {};
     return [
       "情绪温度：" + s.warmth + "/100（0 极冷，100 极暖）",
       "内在张力：" + s.tension + "/100",
@@ -119,6 +120,8 @@
       "覆盖度：" + Math.round(a.metrics.coverage * 100) + "%",
       "冷暖比例：暖 " + Math.round(a.metrics.warmRatio * 100) + "% / 冷 " + Math.round(a.metrics.coolRatio * 100) + "%",
       "画面重心：x=" + a.metrics.centroid.x + "，y=" + a.metrics.centroid.y + "（0 左上，1 右下）",
+      "HTP 特征：" + [htp.lineDirection, htp.pressure, htp.repeated ? "反复涂抹" : "",
+        htp.horizBias, htp.vertBias, htp.sizeBias, a.placement].filter(Boolean).join(" · "),
       "主色：" + a.dominantColors.map((c) => c.name + c.hex).join("、"),
       "笔触：" + a.lineStyle + "；空间：" + a.spaceStyle + "；色彩：" + a.colorStyle
     ].join("\n");
@@ -128,6 +131,9 @@
     const prompt = [
       "你是一位受过艺术治疗训练的观察者。用户凭记忆画下了「闭上眼睛觉得最舒服的地方」，并可能留下一句话。",
       "请只观察画面本身，用温和、具体、克制的语言描述，不做心理诊断，不评价画得好坏。",
+      "可参考的知识库边界（只在该框架内组织语言，不得编造未列出的结论）：",
+      window.XHFYKnowledge.buildKnowledgeBlock(),
+      "",
       "用户自述：" + (userText || "（未填写）"),
       "严格输出 JSON（不要 markdown，不要额外解释），字段如下：",
       '{"scene":"一句话描述画面场景，20字以内","elements":["2-6个画面元素，每个2-6字"],"dominant_colors":["2-4个主色名，如 靛蓝、赭石"],"line_quality":"线条给人的感觉，20字以内","space":"空间与留白给人的感觉，20字以内","mood":"整体情绪氛围，20字以内","cold_or_warm":"冷色/暖色/中性","note":"一句克制的观察，30字以内"}'
@@ -186,6 +192,9 @@
       "",
       "【用户自述】",
       userText || "（未填写）",
+      "",
+      "【专家知识库边界】",
+      window.XHFYKnowledge.buildKnowledgeBlock(),
       "",
       "严格输出 JSON（不要 markdown，不要额外解释）。字段与字数要求：",
       JSON.stringify({
