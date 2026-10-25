@@ -59,6 +59,7 @@
     const satArr = new Float32Array(total);
 
     let inkCount = 0;
+    let darkInk = 0;
     let sumX = 0;
     let sumY = 0;
     let warm = 0;
@@ -88,9 +89,10 @@
         const gi = row * 3 + col;
         gridTotal[gi]++;
 
-        if (dist > 26) {
+        if (dist > 20) {
           mask[y * AW + x] = 1;
           inkCount++;
+          if (L < 100) darkInk++;
           sumX += x;
           sumY += y;
           grid[gi]++;
@@ -107,7 +109,7 @@
             hueBins[bin]++;
           }
 
-          if (s < 0.12) neutral++;
+          if (s < 0.16) neutral++;
           else if (h <= 65 || h >= 320) warm++;
           else if (h >= 170 && h < 265) cool++;
           else if (h >= 65 && h < 170) green++;
@@ -290,13 +292,35 @@
     };
 
     // 六大心象维度（0-100）
+    // 关键：所有输入先归一化到 0..1，再按权重加权，避免某项量纲失控直接饱和。
+    // （edgeStrength 是 Sobel 梯度幅值均值，实测范围约 200~900，不能直接线性入公式）
+    const strengthN = clamp((edgeStrength - 150) / 700, 0, 1);
+    const densityN = clamp(edgeDensity / 0.12, 0, 1);
+    const heavyN = clamp(coverage / 0.45, 0, 1);
+    const speedN = clamp((stats.strokeSpeed || 0) / 1.2, 0, 1);
+    const rigidN = orientTotal > 0 ? clamp(1 - orientEntropy, 0, 1) : 0;
+    const darkRatio = inkCount ? darkInk / inkCount : 0;
+    const tintRatio = inkCount ? 1 - neutralRatio : 0;
+    const repeatedInk = stats.soft > 3 && hueEntropy < 0.55;
+
     const scores = {
-      warmth: clamp(32 + (warmRatio - coolRatio) * 55 + satAvg * 28 - neutralRatio * 8, 6, 96),
-      tension: clamp((edgeStrength - 18) * 0.62 + edgeDensity * 260 + lineRatio * 10 + Math.min(18, stats.avgSpeed * 9), 4, 96),
-      space: clamp(100 - coverage * 400, 8, 96),
+      warmth: clamp(30 + (warmRatio - coolRatio) * 52 + satAvg * 30 - neutralRatio * 6, 6, 96),
+      tension: clamp(
+        12 +
+        strengthN * 12 +        // 边缘锐利：笔触的“刺”
+        densityN * 20 +         // 细节密度：信息压迫感
+        heavyN * 20 +           // 画面满溢：透不过气
+        speedN * 12 +           // 落笔急促
+        rigidN * 8 +            // 方向单一：僵硬、不流动
+        darkRatio * 6 +         // 墨色沉重
+        (repeatedInk ? 6 : 0) + // 反复涂抹
+        ((process.changes >= 3) ? 4 : 0), // 反复修正的纠结
+        6, 94
+      ),
+      space: clamp(96 - coverage * 125, 10, 96),
       grounded: clamp(42 + (bottomWeight - 0.33) * 105 + (0.5 - Math.abs(cx - 0.5)) * 42 + symmetry * 18, 6, 96),
-      vitality: clamp(16 + greenRatio * 175 + satAvg * 52 + coverage * 190 + softRatio * 8, 4, 96),
-      order: clamp(symmetry * 48 + (1 - orientEntropy) * 38 + (1 - hueEntropy) * 14, 6, 96)
+      vitality: clamp(12 + tintRatio * 30 + satAvg * 40 + greenRatio * 60 + softRatio * 10 + Math.min(coverage, 0.5) * 40, 4, 96),
+      order: clamp(symmetry * 48 + (orientTotal > 0 ? (1 - orientEntropy) * 38 : 0) + (hueTotal > 0 ? (1 - hueEntropy) * 14 : 0), 6, 96)
     };
     Object.keys(scores).forEach((k) => (scores[k] = Math.round(scores[k])));
 
@@ -308,7 +332,7 @@
           ? "低饱和中性"
           : "冷暖交织";
 
-    const lineStyle = edgeStrength > 62 && lineRatio >= softRatio
+    const lineStyle = strengthN > 0.55 && lineRatio >= softRatio
       ? "细密锋利"
       : softRatio > lineRatio
         ? "柔和晕染"
@@ -342,15 +366,15 @@
         ? "垂直为主"
         : "方向多变";
 
-    // 笔触力度（用边缘强度 + 覆盖度近似"用力"程度）
-    const pressure = edgeStrength > 55
+    // 笔触力度（用归一化边缘锐利度近似"用力"程度）
+    const pressure = strengthN > 0.62
       ? "笔触浓重"
-      : edgeStrength < 28
+      : strengthN < 0.18
         ? "笔触轻淡"
         : "笔触适中";
 
-    // 反复涂抹：边缘强但色彩数量少 / 或同色重复
-    const repeated = edgeStrength > 45 && hueEntropy < 0.55 && stats.soft > 3;
+    // 反复涂抹：边缘锐利但色彩数量少 / 或同色反复覆盖
+    const repeated = strengthN > 0.35 && hueEntropy < 0.55 && stats.soft > 3;
 
     // 位置倾向（结合重心与九宫格权重）
     const horizBias = leftWeight > rightWeight + 0.06

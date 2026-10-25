@@ -135,6 +135,9 @@
   function describeAnalysis(a) {
     const s = a.scores;
     const htp = a.htp || {};
+    const m = a.metrics || {};
+    const pct = (x) => Math.round((x || 0) * 100) + "%";
+    const grid = (m.grid || []).map(pct);
     return [
       "情绪温度：" + s.warmth + "/100（0 极冷，100 极暖）",
       "内在张力：" + s.tension + "/100",
@@ -142,9 +145,14 @@
       "扎根感：" + s.grounded + "/100",
       "生命活力：" + s.vitality + "/100",
       "秩序感：" + s.order + "/100",
-      "覆盖度：" + Math.round(a.metrics.coverage * 100) + "%",
-      "冷暖比例：暖 " + Math.round(a.metrics.warmRatio * 100) + "% / 冷 " + Math.round(a.metrics.coolRatio * 100) + "%",
-      "画面重心：x=" + a.metrics.centroid.x + "，y=" + a.metrics.centroid.y + "（0 左上，1 右下）",
+      "覆盖度：" + pct(m.coverage) + "；边缘密度：" + m.edgeDensity + "；笔压强度：" + m.edgeStrength,
+      "方向一致性：" + (1 - (m.orientationEntropy || 0)).toFixed(2) + "（方向熵 " + m.orientationEntropy + "）",
+      "色相熵：" + m.hueEntropy + "（越高颜色越杂）；左右对称度：" + m.symmetry,
+      "冷暖比例：暖 " + pct(m.warmRatio) + " / 冷 " + pct(m.coolRatio) + " / 中性 " + pct(m.neutralRatio) + " / 绿 " + pct(m.greenRatio),
+      "平均饱和度：" + m.satAvg + "；平均明度：" + m.lightAvg,
+      "画面重心：x=" + (m.centroid && m.centroid.x) + "，y=" + (m.centroid && m.centroid.y) + "（0 左上，1 右下）",
+      "四区权重：上 " + pct(m.topWeight) + " / 下 " + pct(m.bottomWeight) + " / 左 " + pct(m.leftWeight) + " / 右 " + pct(m.rightWeight),
+      "九宫格笔墨分布：" + grid.join(" · ") + "（按左上→右中→右下顺序）",
       "HTP 特征：" + [htp.lineDirection, htp.pressure, htp.repeated ? "反复涂抹" : "",
         htp.horizBias, htp.vertBias, htp.sizeBias, a.placement].filter(Boolean).join(" · "),
       "主色：" + a.dominantColors.map((c) => c.name + c.hex).join("、"),
@@ -159,7 +167,7 @@
       "观察这幅画，用温和具体的语言描述你看到的。不做心理诊断，不评价好坏。",
       analysis ? ("作画过程（仅辅助理解，不复述数字）：" + describeProcess(analysis)) : "",
       "用户自述：" + (userText || "未填写"),
-      "只输出 JSON：{\"scene\":\"场景≤20字\",\"elements\":[\"2-6个元素，2-6字\"],\"dominant_colors\":[\"2-4个主色名\"],\"line_quality\":\"线条感受≤20字\",\"space\":\"空间感受≤20字\",\"mood\":\"氛围≤20字\",\"cold_or_warm\":\"冷/暖/中性\",\"note\":\"克制观察≤30字\"}"
+      "只输出 JSON：{\"scene\":\"场景≤20字\",\"elements\":[\"2-6个元素，2-6字\"],\"dominant_colors\":[\"2-4个主色名\"],\"line_quality\":\"线条感受≤20字\",\"space\":\"空间感受≤20字\",\"mood\":\"氛围≤20字\",\"cold_or_warm\":\"冷/暖/中性\",\"layout\":\"一句话说明每个主要图形在画面的位置与走向，如“从左下到右上的斜线、中部空心方块、右上圆圈”，≤60字\",\"note\":\"克制观察≤30字\"}"
     ].filter(Boolean).join("\n");
 
     const content = await chat([
@@ -188,6 +196,8 @@
       space: parsed.space || "",
       mood: parsed.mood || "",
       coldOrWarm: parsed.cold_or_warm || "",
+      // 元素的空间位置：二创提示词靠它复刻原画构图，比单纯列元素名有效得多
+      layout: typeof parsed.layout === "string" ? parsed.layout.trim() : "",
       note: parsed.note || "",
       raw: parsed
     };
@@ -197,44 +207,61 @@
     const v = visionData || {};
     const regIds = window.XHFYKnowledge.regulations.map((r) => r.id).join("/");
     const prompt = [
-      "你是「心绘非遗」心理观察与非遗转化顾问。语言温柔具体有文学性，但克制：不诊断不贴临床标签；用「可能/也许/像是」；引用具体颜色线条空间元素；结尾给可执行的小力量感。",
+      "你是「心绘非遗」的绘画心理投射分析师。理论框架限定为：HTP 屋树人投射测验、表达性艺术治疗（EAT / ETC 连续系统）、应用色彩心理学、正念手作（MBCT / MBSR）。",
+      "任务是做一次可复核的严格分析，不是写安慰文。宁可说「难以判断」，也不要编造。",
       "",
-      "【量化视觉分析】" + describeAnalysis(analysis),
-      "【作画过程】" + describeProcess(analysis),
-      "【视觉观察】场景:" + (v.scene || "无") + "；元素:" + ((v.elements || []).join("、") || "无") +
-        "；线条:" + (v.lineQuality || "无") + "；空间:" + (v.space || "无") +
+      "【硬性规则】",
+      "1. 证据优先：每条结论必须引用下方给出的具体量化指标（写明数字）或视觉观察里的具体元素；没有证据就不要下结论。",
+      "2. 标注框架：每段分析末尾用括号注明依据，如（HTP 空间投射）（色彩心理学）（EAT 容器理论）（MBCT）。",
+      "3. 多解并存：对最突出的 1–2 个特征，先给主解读，再给一个同样合理的替代解读，并说明为什么更倾向主解读。",
+      "4. 把握度分三档：较有把握 / 可能 / 难以判断；证据不足时直接写明局限，不要假装确定。",
+      "5. 不诊断、不使用临床标签（抑郁、焦虑症、创伤等）、不承诺疗效。",
+      "6. 语气克制，用「可能 / 也许 / 更像是」；结论落到自我觉察 + 一个可执行的小行动。",
+      "7. 分数只是线索，不是结论：不得把「张力 72」直接翻译成「你很焦虑」，必须同时引用笔触形态、位置、颜色等可视证据，说明为何这样读。",
+      "8. 当量化指标与云端视觉观察冲突时，以可复核的视觉观察为准，并在 evidence 中写明这处冲突。",
+      "",
+      "【量化视觉分析（本地算法，0–100，已按画面尺度归一化）】",
+      describeAnalysis(analysis),
+      "【作画过程】",
+      describeProcess(analysis),
+      "【云端视觉观察（GLM-4V）】场景:" + (v.scene || "无") + "；元素:" + ((v.elements || []).join("、") || "无") +
+        "；布局:" + (v.layout || "无") + "；线条:" + (v.lineQuality || "无") + "；空间:" + (v.space || "无") +
+        "；主色:" + ((v.dominantColors || []).join("、") || "无") + "；冷暖:" + (v.coldOrWarm || "无") +
         "；氛围:" + (v.mood || "无") + "；观察:" + (v.note || "无"),
       "【用户自述】" + (userText || "无"),
       "",
       window.XHFYKnowledge.buildKnowledgeBlockRich(),
       "",
-      "严格输出 JSON（中文，无 markdown），字段：",
+      "严格输出 JSON（中文，无 markdown），字段与要求：",
       JSON.stringify({
         title: "6-12字意象名",
         archetype: "4-8字",
-        summary: "80-120字第二人称总述",
-        colors: "60-100字色彩解读",
-        lines: "60-100字线条与张力",
-        space: "60-100字空间重心留白",
-        strength: "30-60字画面的一处资源",
+        summary: "120-180字第二人称总述，必须引用至少3个具体证据（数字或画面元素）",
+        evidence: ["3-5条，每条格式：具体指标或现象 → 可能的含义（框架）"],
+        colors: "100-140字色彩解读，须引用具体色名、冷暖占比、饱和度",
+        lines: "100-140字线条与张力，须引用张力分值、线条方向、笔触力度、方向一致性",
+        space: "100-140字空间与留白，须引用覆盖度、重心位置、留白指数、画面四区权重",
+        alternative: "70-110字：对最突出特征给出另一种同样合理的解读，并说明本次为何更倾向主解读",
+        confidence: "「较有把握」/「可能」/「难以判断」三选一，后接10字内理由",
+        strength: "40-70字：画面中的一处心理资源，须指认具体位置或元素",
         whisper: "20-40字温柔提醒",
-        process: "70-110字过程印记，引用作画时长/停顿/撤销/换色中至少两项",
-        mood: "40-70字当下心情，用也许/像是",
-        regulation: { id: "从 " + regIds + " 选最贴合的一个", why: "30-50字说明为什么适合" },
-        craft: { style: "papercut/tiedye/calico/bamboo 选一个", reason: "30-60字", elements: "20-40字元素如何转译" },
+        process: "80-130字过程印记，引用作画时长/停顿/撤销/换色/笔速中至少三项",
+        mood: "50-80字当下心情，用也许/像是，并标注把握度",
+        regulation: { id: "从 " + regIds + " 选最贴合证据的一个", why: "40-60字说明这个调节方法与哪些证据匹配" },
+        craft: { style: "papercut/tiedye/calico/bamboo 选一个", reason: "40-70字说明为何此工艺贴合画面结构", elements: "30-50字说明画面哪些元素如何转译为纹样" },
         guide: { intro: "30-50字", materials: ["4-6项"], steps: [{ title: "4-8字", text: "30-50字含正念呼吸" }], mantra: "20-35字正念引导语" }
       })
     ].join("\n");
 
     const content = await chat([
-      { role: "system", content: "只输出合法 JSON，中文，无 markdown。" },
+      { role: "system", content: "你是严谨的绘画心理投射分析师，只输出合法 JSON，中文，无 markdown。不确定时明确写出不确定。" },
       { role: "user", content: prompt }
     ], {
-      model: AI.textModel,
-      temperature: 0.85,
-      maxTokens: 1700,
+      model: AI.reportModel || AI.textModel,
+      temperature: 0.6,
+      maxTokens: 3000,
       json: true,
-      timeout: 90000
+      timeout: 120000
     });
 
     const parsed = extractJSON(content);
@@ -288,53 +315,46 @@
 
   /**
    * 本地构建二创蓝图（不调用 LLM，省掉一次完整请求）。
-   * 原画的构图、元素、配色、重心都已在 analysis 中量化，
-   * 这里只把它们拼成图像模型可用的提示词。
+   * 这里的图像模型只负责生成「一张满版的非遗纹样底纹」；
+   * 构图不交给模型猜（它会画跑偏），而是由前端用用户真实笔迹做裁切蒙版，
+   * 这样成品的构图、主体位置与留白必然与原画一致。
    */
   function craftBlueprint(analysis, report, style) {
-    const v = (report && report.vision) || {};
-    const htp = analysis.htp || {};
-    const elements = (v.elements && v.elements.length)
-      ? v.elements.slice(0, 5)
-      : (analysis.dominantColors || []).map((c) => c.name).slice(0, 3);
-    const palette = (analysis.dominantColors || []).map((c) => c.name).slice(0, 4);
-    const motifs = (CRAFT_MOTIFS[style] || CRAFT_MOTIFS.papercut).slice(0, 4);
-    const title = (report && (report.archetype || report.title)) || "心象纹样";
-    const composition = "主体" + (htp.horizBias || "居中") + "、" +
-      (htp.vertBias || "居中") + "，" + (htp.sizeBias || "适中") + "，保留原画留白比例";
+    const meta = (window.XHFYCraft && window.XHFYCraft.META[style]) || { short: style, name: style, palette: ["#A63A2B"] };
+
+    const palette = (analysis.dominantColors || []).slice(0, 3)
+      .map((c) => c.name).filter((n) => n && n !== "墨色");
+    const motifs = (CRAFT_MOTIFS[style] || CRAFT_MOTIFS.papercut);
 
     const prompt = [
-      "以用户原画的构图为基础（" + composition + "），",
-      "将主体（" + (elements.join("、") || "抽象心象") + "）重绘为中国非遗" +
-        (window.XHFYCraft && window.XHFYCraft.META[style] ? window.XHFYCraft.META[style].short : style) +
-        "风格。",
-      "加入传统纹样：" + motifs.join("、") + "。",
-      palette.length ? "配色以" + palette.join("、") + "为主，贴合原画气质。" : "",
-      "细节丰富，边缘干净，平面装饰艺术，正方形构图，无文字无水印无相框。"
+      "生成一张四边出血、铺满整个画布的非遗" + meta.short + "纹样材质图，供后续裁切使用。",
+      "纹样语法：" + motifs.join("、") + "，细密连续、层次丰富，花纹延伸到画面四边。",
+      palette.length ? "整体色调参考" + palette.join("、") + "的冷暖倾向。" : "",
+      "不要中心主体，不要边框，不要白色留边，不要文字，不要署名，不要水印。",
+      "平面装饰艺术，正视角俯拍，材质肌理清晰，正方形构图。"
     ].filter(Boolean).join("");
 
-    return { title, composition, motifs, palette, prompt, style };
+    return {
+      title: (report && (report.archetype || report.title)) || "心象纹样",
+      motifs,
+      palette,
+      prompt,
+      style
+    };
   }
 
-  /** 按蓝图调用图像模型，生成非遗二创底图 */
+  /** 按蓝图调用图像模型，生成非遗纹样底纹 */
   async function craftRedraw(style, blueprint, analysis, report) {
     const bp = blueprint || {};
     const styleText = STYLE_PROMPTS[style] || STYLE_PROMPTS.papercut;
-    const htp = analysis.htp || {};
-    const elements = ((report && report.vision && report.vision.elements) || []).join("、");
     const prompt = [
       styleText,
       bp.prompt || "",
-      bp.composition ? "构图要求：" + bp.composition : "",
-      "沿用原画的主体位置（" + htp.horizBias + "·" + htp.vertBias + "）与留白比例，不要添加原画里没有的人物",
-      elements ? "原画元素：" + elements : "",
-      (bp.motifs && bp.motifs.length) ? "加入传统纹样：" + bp.motifs.join("、") : "",
-      (bp.palette && bp.palette.length) ? "配色：" + bp.palette.join("、") : "",
-      "正方形构图，1:1，高清，细节丰富，边缘干净，平面装饰艺术，无文字，无水印，无相框，适合作为剪纸 / 印染底稿"
+      "满版连续纹样，四边出血，无中心主体，无文字，无边框，无水印，正方形。"
     ].filter(Boolean).join("。");
 
     const data = await call("/images/generations", {
-      model: AI.imageModel,
+      model: AI.imageModel || "cogview-3-flash",
       prompt,
       size: "1024x1024"
     }, 90000);
@@ -344,7 +364,6 @@
     return url;
   }
 
-  /** 兼容旧接口：直接按元素生成一张灵感稿 */
   function blobToDataURL(blob) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -354,20 +373,26 @@
     });
   }
 
-  /** 把图像 URL 取回为 dataURL：CogView 图片不带 CORS 头，需经本地中继转发 */
+  // 图像 CDN（ufileos.com）不返回 CORS 头，canvas 会被污染；
+  // images.weserv.nl 是带 `Access-Control-Allow-Origin: *` 的图片网关，可用作只读取图。
+  const IMAGE_GATEWAY = "https://images.weserv.nl/?url=";
+
+  /** 把图像 URL 取回为 dataURL（供 canvas 裁切使用） */
   async function imageToDataURL(url) {
-    try {
-      const res = await fetch(url, { mode: "cors" });
-      if (res.ok) return await blobToDataURL(await res.blob());
-    } catch (e) {}
+    const attempts = [];
     const relay = (AI.relay || "").trim();
-    if (relay) {
+    attempts.push(url);
+    if (relay) attempts.push(relay.replace("{url}", encodeURIComponent(url)));
+    attempts.push(IMAGE_GATEWAY + encodeURIComponent(url) + "&output=png");
+
+    for (const u of attempts) {
       try {
-        const res = await fetch(relay.replace("{url}", encodeURIComponent(url)), { method: "GET" });
-        if (res.ok) return await blobToDataURL(await res.blob());
+        const res = await fetch(u, { mode: "cors" });
+        if (!res.ok) continue;
+        return await blobToDataURL(await res.blob());
       } catch (e) {}
     }
-    throw new Error("图片受跨域限制，请启动本地中继后再生成二创稿");
+    throw new Error("纹样底图受跨域限制，暂时无法裁切");
   }
 
   async function test() {

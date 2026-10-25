@@ -578,8 +578,8 @@
       return this.composite(width || 480).toDataURL("image/jpeg", 0.86);
     }
 
-    /** 透明背景的纯笔迹图，用于 AI 二创上的「原笔迹」叠层 */
-    traceDataURL(width) {
+    /** 透明背景的纯笔迹画布，用于生成裁切蒙版 */
+    traceCanvas(width) {
       const w = width || 480;
       const h = Math.round((w / W) * H);
       const out = document.createElement("canvas");
@@ -600,7 +600,12 @@
       this.ctx = mainCtx;
       this.canvas = mainCanvas;
       ctx.restore();
-      return out.toDataURL("image/png");
+      return out;
+    }
+
+    /** 透明背景的纯笔迹图 */
+    traceDataURL(width) {
+      return this.traceCanvas(width).toDataURL("image/png");
     }
   }
 

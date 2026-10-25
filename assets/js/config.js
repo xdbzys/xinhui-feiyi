@@ -6,6 +6,9 @@ window.XHFY_CONFIG = {
     base: "https://www.bigmodel.cn/api/paas/v4",
     visionModel: "glm-4v-flash",
     textModel: "glm-4-flash",
+    // 心理图鉴使用更强的旗舰模型：分析质量优先，一次分析只调用一次。
+    reportModel: "glm-4-plus",
+    // 生成剪纸/印染纹样底纹；这一步只提供材质，构图由用户笔迹裁切决定。
     imageModel: "cogview-3-flash",
     // 演示站点内置 Key（Base64 存放，避免被简单抓取）。
     keyCipher: "NmZjMDY5MzUyYzk4NDg5OWI2MTkzNzMzYTg1MTNjYzEuRWVZZlVCRmozdEVxcUNacQ==",

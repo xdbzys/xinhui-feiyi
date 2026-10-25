@@ -287,6 +287,59 @@
     }
   };
 
+  /* ---------------- 分析依据（本地兜底） ---------------- */
+
+  function evidenceOf(analysis) {
+    const s = analysis.scores;
+    const m = analysis.metrics;
+    const p = analysis.process || {};
+    const out = [];
+    out.push("内在张力 " + s.tension + "/100（边缘锐利度 " + m.edgeStrength + "，笔触密度 " +
+      Math.round(m.edgeDensity * 100) + "%）→ " +
+      (s.tension >= 65 ? "画面里有较明显的撑紧感" : s.tension >= 45 ? "有张力，但仍在可控范围" : "笔触相对松弛，张力不高") +
+      "（HTP 笔触力度）");
+    out.push("色彩冷暖：暖 " + Math.round(m.warmRatio * 100) + "% / 冷 " + Math.round(m.coolRatio * 100) + "%，饱和度 " +
+      m.satAvg + " → " +
+      (m.warmRatio > m.coolRatio + 0.12 ? "更靠近体温与外部能量" : m.coolRatio > m.warmRatio + 0.12
+        ? "更靠近安静与向内收" : "冷暖同时在场，情绪并存") + "（色彩心理学）");
+    out.push("覆盖度 " + Math.round(m.coverage * 100) + "%，留白指数 " + s.space + "/100 → " +
+      (s.space >= 70 ? "保留了很多未被言说的空间" : s.space >= 40 ? "疏密之间还能呼吸" : "画面被填得较满，透气的余地不多") +
+      "（EAT 空间与容器）");
+    out.push("重心 x=" + m.centroid.x + "、y=" + m.centroid.y + "（0 左上，1 右下）→ " +
+      analysis.placement + "，对应" +
+      (analysis.placement === "重心下沉" ? "对安全感与基础的关注" : analysis.placement === "重心上浮"
+        ? "对想象与向上的期待" : "相对平衡的自我位置") + "（HTP 空间投射）");
+    if (p.strokes) {
+      out.push("过程：落笔 " + Math.round(p.activeSec || 0) + " 秒 / 停顿 " + (p.pauses || 0) + " 次 / 撤销 " +
+        (p.undo || 0) + " 次 / 换色 " + (p.colorSwitches || 0) + " 次 → " +
+        ((p.undo || 0) >= 3 ? "对某些部分格外在意，反复调整" :
+          (p.pauses || 0) >= 2 ? "落笔之间在斟酌与整理" : "下笔比较连贯，表达较直接") + "（EAT 过程即调节）");
+    }
+    return out.slice(0, 5);
+  }
+
+  function alternativeOf(analysis) {
+    const s = analysis.scores;
+    if (s.tension >= 60) {
+      return "也可以换个方向看：这股张力也许不是压力，而是你把注意力集中在一处的证据——画面里线条的密度与力度说明你在意它。本次更倾向「撑紧」这一解读，是因为同时出现了留白收缩（留白指数 " +
+        s.space + "/100）与重心" + analysis.placement.replace("重心", "") + "，两者一起更像是在用力维持某个位置，而不只是专注。";
+    }
+    if (s.space >= 70) {
+      return "也可以换个方向看：大面积留白也许不是孤独，而是你给自己留的余地，是一种有意识的节制（EAT 允许模糊）。本次更倾向「留有余地」这一解读，是因为笔触数量与落笔时长都还在，说明并非无力落笔，而是选择不填满。";
+    }
+    return "也可以换个方向看：画面里较满的分布也许不是压抑，而是表达欲旺盛、愿意把感受铺开（EAT 材料作为情绪容器）。本次更倾向「信息较密」这一解读，是因为线条方向" +
+      (analysis.htp.lineDirection || "较多变") + "且换色 " + ((analysis.process || {}).colorSwitches || 0) +
+      " 次，能量更偏向外放。";
+  }
+
+  function confidenceOf(analysis) {
+    const p = analysis.process || {};
+    const enough = (p.strokes || 0) >= 5 && analysis.metrics.coverage > 0.025;
+    if (enough) return "较有把握：笔触与过程数据较充分，结论有量化依据";
+    if ((p.strokes || 0) >= 2) return "可能：画面信息偏少，解读仅作参考";
+    return "难以判断：落笔过少，建议多画几笔再读";
+  }
+
   function makeFallbackReport(analysis, userText, vision) {
     const v = vision || {};
     const archetype = archetypeOf(analysis);
@@ -308,6 +361,9 @@
       title: archetype,
       archetype,
       summary,
+      evidence: evidenceOf(analysis),
+      alternative: alternativeOf(analysis),
+      confidence: confidenceOf(analysis),
       colors: colorNarrative(analysis),
       lines: lineNarrative(analysis),
       space: spaceNarrative(analysis),
@@ -332,6 +388,8 @@
         scene: (v.scene || ""),
         mood: (v.mood || ""),
         note: (v.note || ""),
+        // 元素位置：AI 二创需要它来复刻原画构图
+        layout: (v.layout || ""),
         colors: (v.dominantColors && v.dominantColors.length) ? v.dominantColors : names
       },
       source: "local"

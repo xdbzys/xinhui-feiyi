@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=14157a7">
+<link rel="stylesheet" href="assets/css/style.css?v=802127e">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -345,21 +345,14 @@
           </button>
         </div>
 
-        <div class="craft-view-switch" id="craftViewSwitch" role="group" aria-label="图样视图">
-          <button class="active" type="button" data-view="local">本地纹样</button>
-          <button type="button" data-view="ai">AI 二创</button>
-        </div>
-
         <div class="craft-stage">
           <div class="craft-frame">
-            <canvas id="craftCanvas" width="1024" height="1024" aria-label="非遗风格图样预览"></canvas>
-            <canvas id="aiCraftCanvas" width="1024" height="1024" hidden aria-label="AI 二创非遗作品"></canvas>
             <img id="aiCraftImg" alt="AI 二创非遗作品" hidden>
             <span class="craft-badge" id="craftBadge">非遗剪纸</span>
-            <div class="craft-loading" id="craftLoading" hidden><i></i><span>正在重织纹样…</span></div>
-            <div class="ai-craft-empty" id="aiCraftEmpty" hidden>
-              <p>AI 会保留你的构图、主体位置与笔迹，把它重绘成细节更完整的非遗纹样。</p>
-              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">让 AI 二创当前工艺</button>
+            <div class="craft-loading" id="craftLoading" hidden><i></i><span>AI 正在重绘纹样…</span></div>
+            <div class="ai-craft-empty" id="aiCraftEmpty">
+              <p>AI 只生成一张满版的非遗纹样材质，再按你的真实笔迹裁切。构图、主体位置与留白和你画的完全一致，变化的是材质与纹样语法。</p>
+              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">生成 AI 非遗二创</button>
             </div>
           </div>
           <aside class="craft-info">
@@ -373,12 +366,12 @@
             </dl>
             <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
             <div class="craft-actions">
-              <button id="downloadPattern" class="btn btn-primary" type="button"><span>下载 2048px 图样</span><i>↓</i></button>
-              <button id="aiRedraw" class="btn btn-ghost" type="button">AI 二创当前工艺</button>
+              <button id="aiRedraw" class="btn btn-primary" type="button"><span>AI 二创当前工艺</span><i>✦</i></button>
+              <button id="downloadPattern" class="btn btn-ghost" type="button" hidden>下载 AI 二创稿</button>
             </div>
-            <p class="ai-redraw-note" id="aiRedrawNote">AI 二创会先读懂你的构图与元素，再重绘成更完整的非遗纹样，并把你的原笔迹轻轻叠回去——不是给原图套滤镜。</p>
+            <p class="ai-redraw-note" id="aiRedrawNote">形状来自你的笔迹：AI 负责非遗材质与纹样语法，前端按你的真实笔迹裁切，所以走向、位置与留白和你画的一一对应。</p>
             <div class="ai-art-meta" id="aiArtMeta" hidden>
-              <span id="aiArtTitle">AI 二创 · 保留原笔迹</span>
+              <span id="aiArtTitle">AI 二创 · 保留原构图</span>
               <a href="#" id="aiArtDownload" hidden>下载 AI 二创稿 ↓</a>
             </div>
             <button id="toGuide" class="link-btn" type="button">带着这张图样，进入心愈手作 →</button>
@@ -386,9 +379,9 @@
         </div>
 
         <div class="mapping-row">
-          <div class="mapping-step"><span>提取</span><p>识别海、树、太阳等画面元素与主色</p></div>
+          <div class="mapping-step"><span>提取</span><p>识别画面元素、主色与笔迹走向</p></div>
           <div class="mapping-arrow">→</div>
-          <div class="mapping-step"><span>转译</span><p>映射为镂空、晕染、冰裂、经纬的纹样语法</p></div>
+          <div class="mapping-step"><span>转译</span><p>AI 生成非遗纹样材质，按你的笔迹裁切</p></div>
           <div class="mapping-arrow">→</div>
           <div class="mapping-step"><span>落地</span><p>输出可打印、可剪裁、可再创作的非遗底稿</p></div>
         </div>
@@ -521,6 +514,12 @@
         </div>
       </section>
 
+      <section class="report-section report-evidence">
+        <h3><span>00</span>分析依据与把握度</h3>
+        <ul class="report-evidence-list" id="reportEvidence"></ul>
+        <p class="report-confidence" id="reportConfidence"></p>
+      </section>
+
       <section class="report-section">
         <h3><span>01</span>色彩的语言</h3>
         <p id="reportColor"></p>
@@ -572,6 +571,11 @@
         <blockquote id="reportMantra"></blockquote>
       </section>
 
+      <section class="report-section report-alternative">
+        <h3><span>08</span>另一种可能</h3>
+        <p id="reportAlternative"></p>
+      </section>
+
       <footer class="report-footer">
         <p>本图鉴由「心绘非遗」系统生成。AI 分析基于艺术治疗中的投射与色彩心理学框架，仅供自我觉察，不构成医学诊断。</p>
         <p>心绘非遗 · 让心象被看见，也被触摸</p>
@@ -602,13 +606,13 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=14157a7"></script>
-<script src="assets/js/paint.js?v=14157a7"></script>
-<script src="assets/js/analyze.js?v=14157a7"></script>
-<script src="assets/js/craft.js?v=14157a7"></script>
-<script src="assets/js/knowledge.js?v=14157a7"></script>
-<script src="assets/js/ai.js?v=14157a7"></script>
-<script src="assets/js/report.js?v=14157a7"></script>
-<script src="assets/js/app.js?v=14157a7"></script>
+<script src="assets/js/config.js?v=802127e"></script>
+<script src="assets/js/paint.js?v=802127e"></script>
+<script src="assets/js/analyze.js?v=802127e"></script>
+<script src="assets/js/craft.js?v=802127e"></script>
+<script src="assets/js/knowledge.js?v=802127e"></script>
+<script src="assets/js/ai.js?v=802127e"></script>
+<script src="assets/js/report.js?v=802127e"></script>
+<script src="assets/js/app.js?v=802127e"></script>
 </body>
 </html>

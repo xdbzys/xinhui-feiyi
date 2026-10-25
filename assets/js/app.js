@@ -14,16 +14,10 @@
     vision: null,
     report: null,
     craftStyle: "papercut",
-    craftView: "local",
-    craftEl: null,
-    craftURL: "",
-    reportPatternURL: "",
     aiImageURL: "",
-    aiBaseImg: null,
     aiBaseStyle: "",
+    aiComposed: false,
     aiBlueprint: null,
-    aiComposedEl: null,
-    aiComposedURL: "",
     regulations: [],
     regulationIndex: 0,
     busy: false
@@ -349,10 +343,17 @@
 
   function normalizeReport(ai, fallback) {
     const out = Object.assign({}, fallback, ai || {});
-    const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "strength", "whisper", "process", "mood"];
+    const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "strength", "whisper", "process", "mood",
+      "alternative", "confidence"];
     strKeys.forEach((k) => {
       if (!out[k] || typeof out[k] !== "string") out[k] = fallback[k];
     });
+
+    // 分析依据：AI 给的数组优先，缺失时退回本地证据链
+    const ev = ai && ai.evidence;
+    out.evidence = (Array.isArray(ev) && ev.length)
+      ? ev.filter((x) => typeof x === "string" && x.trim()).slice(0, 6)
+      : fallback.evidence;
 
     // 心象处方：AI 只从知识库 ID 中选，具体步骤始终由本地知识库给出
     const localRegs = (fallback.regulations || []).slice();
@@ -393,7 +394,6 @@
     const text = $("#moodText").value.trim();
     state.busy = true;
     $("#analyzeBtn").disabled = true;
-    state.reportPatternURL = "";
     state.regulationIndex = 0;
     resetAiArt();
 
@@ -453,14 +453,12 @@
     state.analysis.aiReport = !!aiReport;
     state.analysis.userText = text;
 
-    // 非遗
-    setStage("craft", "active");
-    $("#loadingNote").textContent = "正在把你的笔触织成非遗纹样…";
+    // 非遗：只保留 AI 二创，本地纹样已移除；工艺信息先就位，二创由用户主动生成
+    setStage("craft", "done");
     const style = state.report.craft.style;
     state.craftStyle = style;
     selectCraftTab(style);
-    await renderCraft(style, false);
-    setStage("craft", "done");
+    updateCraftInfo(style);
 
     renderAnalysis();
     renderGuide();
@@ -577,6 +575,17 @@
     $("#reportGuideSteps").innerHTML = (r.guide.steps || []).map((s) =>
       "<li><strong>" + escapeHTML(s.title || "") + "</strong>" + escapeHTML(s.text || "") + "</li>").join("");
     $("#reportMantra").textContent = r.guide.mantra || "";
+
+    // 分析依据与把握度
+    const evEl = $("#reportEvidence");
+    if (evEl) {
+      evEl.innerHTML = (r.evidence || [])
+        .map((t) => "<li>" + escapeHTML(t) + "</li>").join("");
+    }
+    const cfEl = $("#reportConfidence");
+    if (cfEl) cfEl.textContent = r.confidence ? "把握度：" + r.confidence : "";
+    const altEl = $("#reportAlternative");
+    if (altEl) altEl.textContent = r.alternative || "";
   }
 
   function renderRegulation() {
@@ -620,94 +629,122 @@
     });
   }
 
-  function activePatternURL() {
-    if (state.craftView === "ai" && state.aiImageURL) return state.aiImageURL;
-    return state.craftURL;
-  }
-
-  function setCraftView(view) {
-    state.craftView = view;
-    const hasAI = !!state.aiImageURL;
-    $$("#craftViewSwitch button").forEach((b) => {
-      b.classList.toggle("active", b.dataset.view === view);
-    });
-    $("#craftCanvas").hidden = view === "ai";
-    $("#aiCraftCanvas").hidden = true;
-    $("#aiCraftImg").hidden = view !== "ai" || !hasAI;
-    $("#aiCraftEmpty").hidden = view !== "ai" || hasAI;
-    $("#aiArtMeta").hidden = !(view === "ai" && hasAI);
-    state.reportPatternURL = "";
-    applyMockup(activePatternURL());
-  }
-
-  function resetAiArt(keepView) {
-    state.aiImageURL = "";
-    state.aiBaseImg = null;
-    state.aiBaseStyle = "";
-    state.aiBlueprint = null;
-    state.aiComposedEl = null;
-    state.aiComposedURL = "";
-    state.reportPatternURL = "";
-    const el = $("#aiCraftCanvas");
-    if (el) el.getContext("2d").clearRect(0, 0, el.width, el.height);
-    $("#aiCraftCanvas").hidden = true;
-    $("#aiCraftImg").hidden = true;
-    $("#aiCraftImg").removeAttribute("src");
-    $("#aiCraftEmpty").hidden = true;
-    $("#aiArtMeta").hidden = true;
-    $("#aiArtDownload").hidden = true;
-    $("#aiRedrawNote").hidden = false;
-    if (!keepView && state.craftView === "ai") setCraftView("local");
-  }
-
-  async function renderCraft(style, showLoader) {
-    const loader = $("#craftLoading");
-    if (showLoader) loader.hidden = false;
-    await nextFrame();
-    await sleep(showLoader ? 180 : 30);
-    try {
-      const c = window.XHFYCraft.render(style, studio, 1024);
-      state.craftEl = c;
-      const target = $("#craftCanvas");
-      const ctx = target.getContext("2d");
-      ctx.clearRect(0, 0, target.width, target.height);
-      ctx.drawImage(c, 0, 0, target.width, target.height);
-      state.craftURL = c.toDataURL("image/png");
-      state.reportPatternURL = "";
-      applyMockup(activePatternURL());
-    } catch (e) {
-      toast("纹样生成失败，请重试");
+  function updateCraftInfo(style) {
+    const meta = window.XHFYCraft.META[style];
+    $("#craftName").textContent = meta.name;
+    $("#craftDesc").textContent = meta.desc;
+    $("#craftBadge").textContent = meta.badge;
+    $("#craftGrammar").textContent = meta.grammar;
+    $("#craftUse").textContent = meta.use;
+    $("#craftNote").textContent = meta.note;
+    if (state.report && state.report.craft && state.report.craft.elements) {
+      $("#craftElements").textContent = state.report.craft.elements;
     }
-    if (showLoader) loader.hidden = true;
+  }
+
+  function applyAiPattern(url) {
+    const img = $("#aiCraftImg");
+    const has = !!url;
+    img.hidden = !has;
+    $("#aiCraftEmpty").hidden = has;
+    $("#aiArtMeta").hidden = !has;
+    $("#aiArtDownload").hidden = !has;
+    $("#aiRedrawNote").hidden = has;
+    $("#downloadPattern").hidden = !has;
+    applyMockup(url || "");
+  }
+
+  /* ---- AI 材质 + 真实笔迹裁切 ---- */
+
+  const COMPOSE_SIZE = 1024;
+
+  /**
+   * 用用户真实笔迹生成裁切蒙版。
+   * 留边映射与 PaintStudio.compositeSquare 一致（8% 留边），
+   * 再沿八个方向偏移绘制一次，把细线膨胀成有宽度的纹样带。
+   */
+  function strokeMaskCanvas(size) {
+    const s = size || COMPOSE_SIZE;
+    const pad = s * 0.08;
+    const inner = s - pad * 2;
+    const trace = studio.traceCanvas(s);
+    const h = (inner / studio.canvas.width) * studio.canvas.height;
+    const y = (s - h) / 2;
+    const mask = document.createElement("canvas");
+    mask.width = s;
+    mask.height = s;
+    const ctx = mask.getContext("2d");
+    const d = Math.max(6, s * 0.008);
+    const dirs = [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]];
+    dirs.forEach(([dx, dy]) => ctx.drawImage(trace, pad + dx, y + dy, inner, h));
+    return mask;
   }
 
   function loadImage(src) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("图片加载失败"));
+      img.onerror = () => reject(new Error("纹样底图加载失败"));
       img.src = src;
     });
   }
 
-  function drawAiComposed(size) {
-    if (!state.aiBaseImg) return null;
-    const style = state.aiBaseStyle || state.craftStyle;
-    const c = window.XHFYCraft.renderAI(state.aiBaseImg, studio, style, size || 1024);
-    if (!size || size === 1024) {
-      state.aiComposedEl = c;
-      const target = $("#aiCraftCanvas");
-      const ctx = target.getContext("2d");
-      ctx.clearRect(0, 0, target.width, target.height);
-      ctx.drawImage(c, 0, 0);
-      state.aiComposedURL = c.toDataURL("image/png");
-    }
-    return c;
+  /** 把满版纹样材质按笔迹形状裁切；返回透明底 PNG dataURL */
+  async function composeAiPattern(textureURL) {
+    const dataURL = await window.XHFYAI.imageToDataURL(textureURL);
+    const tex = await loadImage(dataURL);
+    const s = COMPOSE_SIZE;
+    const side = Math.min(tex.width, tex.height);
+    // 取中心 82%，避开模型常见的边缘留白与右下角角标
+    const crop = side * 0.82;
+    const sx = (tex.width - crop) / 2;
+    const sy = (tex.height - crop) / 2;
+    const out = document.createElement("canvas");
+    out.width = s;
+    out.height = s;
+    const ctx = out.getContext("2d");
+    ctx.drawImage(tex, sx, sy, crop, crop, 0, 0, s, s);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(strokeMaskCanvas(s), 0, 0);
+    return out.toDataURL("image/png");
+  }
+
+  /** 无法把底图读进 canvas 时，用 CSS 蒙版达到同样的裁切效果（不可下载合成图） */
+  function applyCssMask(img) {
+    const maskURL = strokeMaskCanvas(COMPOSE_SIZE).toDataURL("image/png");
+    img.style.webkitMaskImage = "url(" + maskURL + ")";
+    img.style.maskImage = "url(" + maskURL + ")";
+    img.style.webkitMaskSize = "100% 100%";
+    img.style.maskSize = "100% 100%";
+    img.style.webkitMaskRepeat = "no-repeat";
+    img.style.maskRepeat = "no-repeat";
+  }
+
+  function clearCssMask(img) {
+    img.style.webkitMaskImage = "";
+    img.style.maskImage = "";
+  }
+
+  function resetAiArt() {
+    state.aiImageURL = "";
+    state.aiBaseStyle = "";
+    state.aiBlueprint = null;
+    state.aiComposed = false;
+    const img = $("#aiCraftImg");
+    img.removeAttribute("src");
+    clearCssMask(img);
+    applyAiPattern("");
+    $("#aiArtTitle").textContent = "AI 二创 · 保留原构图";
+    const dl = $("#aiArtDownload");
+    dl.removeAttribute("href");
+    dl.hidden = true;
   }
 
   function setAiButtons(loading) {
     const label = loading ? "AI 二创中…" : "AI 二创当前工艺";
-    $("#aiRedraw").textContent = label;
+    const span = $("#aiRedraw").querySelector("span");
+    if (span) span.textContent = label;
+    else $("#aiRedraw").textContent = label;
     $("#aiRedraw").disabled = loading;
     $("#aiCraftEmptyBtn").disabled = loading;
   }
@@ -724,8 +761,7 @@
       return;
     }
     if (state.busy) return;
-    if (state.aiComposedEl && state.aiBaseStyle === state.craftStyle) {
-      setCraftView("ai");
+    if (state.aiImageURL && state.aiBaseStyle === state.craftStyle) {
       toast("这一版 AI 二创已经生成");
       return;
     }
@@ -737,42 +773,54 @@
     const style = state.craftStyle;
     const meta = window.XHFYCraft.META[style];
     loader.hidden = false;
-    setCraftView("ai");
 
     try {
-      // 蓝图现在是本地同步构建（不消耗 AI token），直接进入重绘
+      // 蓝图现在是本地同步构建（不消耗 AI token），直接进入材质生成
       const bp = window.XHFYAI.craftBlueprint(state.analysis, state.report, style);
       state.aiBlueprint = bp;
-      loaderText.textContent = "AI 正在重绘" + meta.short + "纹样…";
+      loaderText.textContent = "AI 正在生成" + meta.short + "纹样材质…";
       const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report);
-      state.aiImageURL = url;
+
+      // 构图不交给模型：用用户真实笔迹做裁切蒙版
+      loaderText.textContent = "正在按你的笔迹裁切" + meta.short + "纹样…";
+      let composed = "";
+      try {
+        composed = await composeAiPattern(url);
+      } catch (e) {
+        composed = "";
+      }
+
+      state.aiImageURL = composed || url;
+      state.aiComposed = !!composed;
       state.aiBaseStyle = style;
 
-      // 直接用 <img> 展示 AI 生成图（图片源站不带 CORS 头，无法画进 canvas，
-      // 但 <img> 展示不受限；用户笔迹已通过蓝图提示词融入重绘）
       const img = $("#aiCraftImg");
-      img.src = url;
+      img.src = state.aiImageURL;
       img.alt = "AI 二创 · " + meta.short;
-      img.hidden = false;
-      $("#aiCraftCanvas").hidden = true;
-      setCraftView("ai");
+      if (composed) clearCssMask(img);
+      else applyCssMask(img);
+      applyAiPattern(state.aiImageURL);
 
       $("#aiArtTitle").textContent = "AI 二创 · " + meta.short + (bp.title ? " · " + bp.title : "");
       const dl = $("#aiArtDownload");
-      dl.href = url;
+      dl.href = state.aiImageURL;
       dl.download = "心绘非遗_AI二创_" + meta.short + ".png";
       dl.hidden = false;
-      dl.target = "_blank";
-      dl.rel = "noopener";
-      $("#aiRedrawNote").hidden = true;
-      applyMockup(url);
-      toast("AI 二创完成：已重绘为" + meta.name, 4200);
+      if (composed) {
+        dl.removeAttribute("target");
+        dl.removeAttribute("rel");
+      } else {
+        dl.target = "_blank";
+        dl.rel = "noopener";
+      }
+      toast(composed
+        ? "AI 二创完成：纹样材质已按你的笔迹裁切"
+        : "AI 二创完成：纹样材质已按你的笔迹显示（无法导出合成图）", 4200);
     } catch (e) {
-      setCraftView("local");
       toast("AI 二创失败：" + e.message, 4800);
     } finally {
       loader.hidden = true;
-      loaderText.textContent = "正在重织纹样…";
+      loaderText.textContent = "AI 正在重绘纹样…";
       setAiButtons(false);
       state.busy = false;
     }
@@ -780,23 +828,15 @@
 
   function initCraftTabs() {
     $$(".craft-tab").forEach((b) => {
-      b.addEventListener("click", async () => {
+      b.addEventListener("click", () => {
         if (state.busy) return;
         const style = b.dataset.style;
-        if (style === state.craftStyle && state.craftEl) return;
+        if (style === state.craftStyle) return;
         state.craftStyle = style;
         selectCraftTab(style);
-        // 换工艺后，之前的 AI 二创稿不再对应，退回本地纹样视图
-        if (state.aiComposedEl && state.aiBaseStyle !== style) resetAiArt(false);
-        const meta = window.XHFYCraft.META[style];
-        $("#craftName").textContent = meta.name;
-        $("#craftDesc").textContent = meta.desc;
-        $("#craftBadge").textContent = meta.badge;
-        $("#craftGrammar").textContent = meta.grammar;
-        $("#craftUse").textContent = meta.use;
-        $("#craftNote").textContent = meta.note;
-        $("#craftLoading").hidden = false;
-        await renderCraft(style, true);
+        // 换工艺后，之前的 AI 二创稿不再对应当前工艺，清空等待重新生成
+        if (state.aiImageURL && state.aiBaseStyle !== style) resetAiArt();
+        updateCraftInfo(style);
         if (state.report && state.analysis) {
           const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision);
           // AI 写的手作指南只针对它推荐的工艺；换工艺后改用该工艺的本地指南
@@ -805,15 +845,11 @@
           state.report.craft.reason = fb.craft.reason;
           state.report.craft.elements = fb.craft.elements;
           $("#reportCraftReason").textContent = fb.craft.reason;
-          $("#reportCraftName").textContent = meta.name;
-          $("#reportFacts").innerHTML = [
-            ["工艺", meta.short],
-            ["纹样语法", meta.grammar],
-            ["适用", meta.use]
-          ].map(([k, v2]) => "<div><dt>" + k + "</dt><dd>" + escapeHTML(v2) + "</dd></div>").join("");
+          $("#reportCraftName").textContent = window.XHFYCraft.META[style].name;
           $("#craftElements").textContent = fb.craft.elements;
           renderGuide();
         }
+        toast("已切换到" + window.XHFYCraft.META[style].short + "，点击「AI 二创当前工艺」生成");
       });
     });
 
@@ -822,44 +858,30 @@
 
     $("#aiRedraw").addEventListener("click", generateAiCraft);
     $("#aiCraftEmptyBtn").addEventListener("click", generateAiCraft);
-    $$("#craftViewSwitch button").forEach((b) => {
-      b.addEventListener("click", () => setCraftView(b.dataset.view));
-    });
 
     $("#toCraftBtn").addEventListener("click", () => scrollToEl("#step3"));
     $("#toGuide").addEventListener("click", () => scrollToEl("#step4"));
   }
 
-  async function downloadPattern(full) {
-    if (!studio || studio.isEmpty()) {
-      toast("还没有可以下载的图样");
+  async function downloadPattern() {
+    if (!state.aiImageURL) {
+      toast("先生成 AI 二创稿，再下载");
+      scrollToEl("#step3");
       return;
     }
-    toast("正在生成 2048px 打印稿…", 2400);
-    await sleep(120);
-    try {
-      const big = (state.craftView === "ai" && state.aiBaseImg)
-        ? window.XHFYCraft.renderAI(state.aiBaseImg, studio, state.aiBaseStyle || state.craftStyle, 2048)
-        : window.XHFYCraft.render(state.craftStyle, studio, 2048);
-      big.toBlob((blob) => {
-        if (!blob) {
-          toast("导出失败，请重试");
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        const meta = window.XHFYCraft.META[state.craftStyle];
-        a.href = url;
-        a.download = "心绘非遗_" + meta.short + "_2048.png";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-        toast("图样已下载，可打印后作为手作底稿");
-      }, "image/png");
-    } catch (e) {
-      toast("导出失败：" + e.message);
+    const meta = window.XHFYCraft.META[state.aiBaseStyle || state.craftStyle];
+    const a = document.createElement("a");
+    a.href = state.aiImageURL;
+    a.download = "心绘非遗_AI二创_" + meta.short + ".png";
+    if (!state.aiComposed) {
+      // 底图源站不带 CORS 头，无法合成时只能打开原图另存
+      a.target = "_blank";
+      a.rel = "noopener";
     }
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast(state.aiComposed ? "AI 二创稿已下载" : "已打开纹样原图，可右键保存", 3200);
   }
 
   /* ---------------- 手作指南 ---------------- */
@@ -878,12 +900,16 @@
       "<li><strong>" + escapeHTML(s.title || "") + "</strong><p>" + escapeHTML(s.text || "") + "</p></li>").join("");
     $("#guideMantra").textContent = guide.mantra || "";
 
-    if (state.craftURL) applyMockup(state.craftURL);
+    if (state.aiImageURL) applyMockup(state.aiImageURL);
   }
 
   function applyMockup(url) {
     const tote = $("#totePattern");
-    if (!tote || !url) return;
+    if (!tote) return;
+    if (!url) {
+      tote.style.backgroundImage = "";
+      return;
+    }
     tote.style.backgroundImage = "url(" + url + ")";
     tote.style.backgroundSize = "78%";
     tote.style.backgroundRepeat = "no-repeat";
@@ -967,17 +993,14 @@
       scrollToEl("#step1");
       return;
     }
-    // 生成报告中的图样（缓存）
-    const activeURL = activePatternURL();
-    if (!state.reportPatternURL && state.craftEl) {
-      if (state.craftView === "ai" && state.aiComposedURL) {
-        state.reportPatternURL = state.aiComposedURL;
-      } else {
-        const c = window.XHFYCraft.render(state.craftStyle, studio, 900);
-        state.reportPatternURL = c.toDataURL("image/png");
-      }
+    // 报告中的图样只使用 AI 二创稿（还没有生成时整块留空）
+    const fig = $("#reportPattern").closest("figure");
+    if (state.aiImageURL) {
+      $("#reportPattern").src = state.aiImageURL;
+      if (state.aiComposed) clearCssMask($("#reportPattern"));
+      else applyCssMask($("#reportPattern"));
     }
-    $("#reportPattern").src = state.reportPatternURL || activeURL || state.craftURL;
+    if (fig) fig.hidden = !state.aiImageURL;
     $("#reportOverlay").hidden = false;
     setNoScroll(true);
     $("#reportOverlay").scrollTop = 0;
@@ -1082,19 +1105,6 @@
     initCompanion();
     initAnalysisActions();
     initSettings();
-
-    // 初始示例纹样占位
-    setTimeout(async () => {
-      if (!studio.isEmpty()) return;
-      // 空画布的工艺纸，让第三幕不显得空
-      try {
-        const c = window.XHFYCraft.render("papercut", studio, 760);
-        state.craftEl = c;
-        const target = $("#craftCanvas");
-        const ctx = target.getContext("2d");
-        ctx.drawImage(c, 0, 0, target.width, target.height);
-      } catch (e) {}
-    }, 800);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
