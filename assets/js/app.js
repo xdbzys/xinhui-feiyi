@@ -750,6 +750,20 @@
     return out.toDataURL("image/png");
   }
 
+  /**
+   * 笔迹骨架的兜底呈现：取图被跨域拦下时，直接把这个本地画布
+   * 以 multiply 叠在成品图上，保证「原线条是主骨架」始终成立。
+   */
+  function paintInkOverlay() {
+    const cv = $("#aiInkOverlay");
+    if (!cv) return;
+    cv.width = COMPOSE_SIZE;
+    cv.height = COMPOSE_SIZE;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, COMPOSE_SIZE, COMPOSE_SIZE);
+    ctx.drawImage(inkLayer(COMPOSE_SIZE), 0, 0);
+  }
+
   function clearCssMask(img) {
     img.style.webkitMaskImage = "";
     img.style.maskImage = "";
@@ -766,6 +780,7 @@
     const img = $("#aiCraftImg");
     img.removeAttribute("src");
     clearCssMask(img);
+    $("#aiInkOverlay").hidden = true;
     applyAiPattern("");
     $("#aiRedrawNote").textContent = AI_NOTE_HINT;
     $("#aiArtTitle").textContent = "AI 二创 · 保留原构图";
@@ -823,6 +838,7 @@
       try {
         composed = await composeCraftArt(url);
       } catch (e) {
+        console.warn("[心绘非遗] 二创合成失败", e && (e.message || e));
         composed = "";
       }
 
@@ -835,6 +851,14 @@
       img.alt = "AI 二创 · " + meta.short;
       clearCssMask(img);
       applyAiPattern(state.aiImageURL);
+
+      // 合成成功时骨架已烘进 PNG；取图失败时用本地画布叠回，主骨架不缺席
+      if (composed) {
+        $("#aiInkOverlay").hidden = true;
+      } else {
+        paintInkOverlay();
+        $("#aiInkOverlay").hidden = false;
+      }
       $("#aiRedrawNote").textContent = window.XHFYAI.craftReadout(bp);
 
       $("#aiArtTitle").textContent = "AI 二创 · " + meta.short + " · " + bp.imagery;
@@ -851,7 +875,7 @@
       }
       toast(composed
         ? "AI 二创完成：你的线条已成「" + bp.imagery + "」"
-        : "AI 二创完成：成品已生成，但无法导出合成图", 4200);
+        : "AI 二创完成：你的线条已成「" + bp.imagery + "」，原笔迹已叠在画面上", 4200);
     } catch (e) {
       toast("AI 二创失败：" + e.message, 4800);
     } finally {

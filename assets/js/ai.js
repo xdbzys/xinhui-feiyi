@@ -515,9 +515,14 @@
     for (const u of attempts) {
       try {
         const res = await fetch(u, { mode: "cors" });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          console.warn("[心绘非遗] 取图失败", u.slice(0, 80), "HTTP " + res.status);
+          continue;
+        }
         return await blobToDataURL(await res.blob());
-      } catch (e) {}
+      } catch (e) {
+        console.warn("[心绘非遗] 取图异常", u.slice(0, 80), e && e.message);
+      }
     }
     throw new Error("纹样底图受跨域限制，暂时无法裁切");
   }

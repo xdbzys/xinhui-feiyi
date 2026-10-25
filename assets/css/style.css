@@ -1340,6 +1340,20 @@ a { color: inherit; }
 #aiCraftImg { display: block; width: 100%; height: 100%; object-fit: cover; background: #f4ebdd; animation: fadeIn 0.7s var(--ease); }
 #aiCraftImg[hidden] { display: none; }
 
+/* 跨域取图失败时，笔迹骨架用本地画布叠在画面之上，保证主骨架始终可见 */
+#aiInkOverlay {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0.3;
+  z-index: 1;
+}
+#aiInkOverlay[hidden] { display: none; }
+
 .ai-craft-empty {
   position: absolute;
   inset: 12px;
@@ -2229,6 +2243,7 @@ a { color: inherit; }
   .companion { left: 10px; right: 10px; bottom: 10px; max-width: none; padding: 11px 13px 9px; }
   .companion-body p { font-size: 12px; }
   .craft-frame { padding: 8px; }
+  #aiInkOverlay { left: 8px; top: 8px; width: calc(100% - 16px); height: calc(100% - 16px); }
   .mapping-row { flex-direction: column; }
   .mapping-arrow { width: auto; height: 34px; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(90deg); }
   .guide-shell { padding: 22px; }
