@@ -1128,7 +1128,7 @@
           if (state.aiImageURL && state.aiBaseStyle !== matched) resetAiArt();
           updateCraftInfo(matched);
           if (state.report && state.analysis) {
-            const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision);
+            const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision, matched);
             if (state.report.guide && state.report.craft.style !== matched) delete state.report.guide;
             state.report.craft.style = matched;
             state.report.craft.reason = fb.craft.reason;
@@ -1149,7 +1149,7 @@
         if (state.aiImageURL && state.aiBaseStyle !== style) resetAiArt();
         updateCraftInfo(style);
         if (state.report && state.analysis) {
-          const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision);
+          const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision, style);
           // AI 写的手作指南只针对它推荐的工艺；换工艺后改用该工艺的本地指南
           if (state.report.guide && state.report.craft.style !== style) delete state.report.guide;
           state.report.craft.style = style;

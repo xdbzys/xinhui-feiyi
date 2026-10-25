@@ -406,11 +406,11 @@
     return "难以判断：落笔过少，建议多画几笔再读";
   }
 
-  function makeFallbackReport(analysis, userText, vision) {
+  function makeFallbackReport(analysis, userText, vision, forcedStyle) {
     const v = vision || {};
     const archetype = archetypeOf(analysis);
     const elements = (v.elements && v.elements.length) ? v.elements : guessElements(userText, analysis);
-    const style = pickCraft(analysis);
+    const style = (forcedStyle && window.XHFYCraft.META[forcedStyle]) ? forcedStyle : pickCraft(analysis);
     const s = analysis.scores;
     const names = dominantNames(analysis);
 
@@ -583,11 +583,12 @@
   function makeGuide(style, reportObj) {
     if (reportObj && reportObj.craft && reportObj.craft.style === style &&
       reportObj.guide && reportObj.guide.steps && reportObj.guide.steps.length) return reportObj.guide;
+    const g = GUIDES[style] || GUIDES.papercut;
     return {
-      intro: GUIDES[style].intro,
-      materials: GUIDES[style].materials,
-      steps: GUIDES[style].steps,
-      mantra: GUIDES[style].mantra
+      intro: g.intro,
+      materials: g.materials,
+      steps: g.steps,
+      mantra: g.mantra
     };
   }
 
