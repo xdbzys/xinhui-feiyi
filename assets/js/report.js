@@ -11,7 +11,10 @@
     { key: "space", label: "留白指数", low: "充盈", high: "空旷" },
     { key: "grounded", label: "扎根感", low: "漂浮", high: "稳定" },
     { key: "vitality", label: "生命活力", low: "收拢", high: "流动" },
-    { key: "order", label: "秩序感", low: "自由", high: "有序" }
+    { key: "order", label: "秩序感", low: "自由", high: "有序" },
+    { key: "egoStrength", label: "自我力量", low: "收敛", high: "笃定" },
+    { key: "completeness", label: "完形程度", low: "弥散", high: "整合" },
+    { key: "visualBalance", label: "视觉平衡", low: "偏侧", high: "均衡" }
   ];
 
   const ELEMENT_DICT = [
@@ -141,6 +144,43 @@
     if (htp.sizeBias === "画面偏小") t += "整体画得比较小，表达有些克制。";
     else if (htp.sizeBias === "画面偏大") t += "整体画得比较满，情感浓度很高。";
     return t;
+  }
+
+  /** 完形与视觉动力：Jung 曼陀罗 + Arnheim 视知觉 + Koch/Machover 自我力量 */
+  function dynamicsNarrative(analysis) {
+    const s = analysis.scores;
+    const jung = analysis.jung || {};
+    const arn = analysis.arnheim || {};
+    const parts = [];
+
+    // Jung 曼陀罗：中心性 / 四象限 / 闭合
+    if (jung.centerPattern === "向中心聚集") {
+      parts.push("笔迹向画面中心收拢，像是内在有一个核心在组织经验（Jung 曼陀罗 中心性）");
+    } else if (jung.centerPattern === "偏离中心") {
+      parts.push("笔迹远离画面中心，中心感尚未凝聚，能量还在边缘游走（Jung 曼陀罗 中心性）");
+    } else {
+      parts.push("笔迹分布弥散，没有明确的中心聚拢或偏离（Jung 曼陀罗 中心性）");
+    }
+    parts.push("四象限" + (jung.quadrantPattern === "四象限均衡" ? "较为均衡" : "有所失衡") +
+      "（均衡度 " + (jung.quadrantBalance || "?") + "），" +
+      (jung.closure === "有闭合结构" ? "画面中有围合的结构，像是在为情绪建立容器" : "结构较为开放，能量向外流动") +
+      "（Jung 曼陀罗 四象限/完形）");
+
+    // Arnheim 视觉动力：平衡 / 重心 / 运动
+    parts.push("视觉平衡度 " + (arn.visualBalance || "?") +
+      "，" + (arn.balancePattern === "视觉平衡" ? "画面重量分布相对均匀" : "重量偏向一侧，有一股拉力在起作用") +
+      "；重心" + (arn.centroidBias || "?") +
+      "；" + (arn.movement || "方向稳定") + "（Arnheim 视觉动力）");
+
+    // 自我力量：Koch / Machover
+    const ego = s.egoStrength || 50;
+    parts.push("自我力量 " + ego + "/100" +
+      (ego >= 65 ? "，画面占比与笔触力度显示你愿意占据空间、用得上力气" :
+       ego <= 38 ? "，画面偏小或笔触偏轻，你把自己收得比较紧" :
+       "，力量在那里，只是还没完全拿出来") +
+      "（Koch 树木 / Machover 画人）");
+
+    return parts.join("；") + "。";
   }
 
   /** 过程印记：说明「怎么画」——时间、停顿、改笔、换色 */
@@ -373,6 +413,7 @@
       colors: colorNarrative(analysis),
       lines: lineNarrative(analysis),
       space: spaceNarrative(analysis),
+      dynamics: dynamicsNarrative(analysis),
       strength: strengthOf(analysis),
       whisper: whisperOf(analysis),
       process: processNarrative(analysis),
@@ -494,7 +535,10 @@
       space: high ? "留白很多，你给自己留了呼吸的余地。" : low ? "画面很满，心里有很多东西同时在场。" : "疏密有致，节奏是舒服的。",
       grounded: high ? "重心稳，你正在找到可以站住的地方。" : low ? "重心有点飘，你还在寻找落点。" : "不算飘，也还没完全落地。",
       vitality: high ? "色彩与覆盖度都在，生命力仍在流动。" : low ? "颜色收得很轻，像把声音调小了。" : "有生气，但不喧闹。",
-      order: high ? "画面有秩序，你在试着把事放回位置。" : low ? "结构自由，你不愿被规则框住。" : "有秩序，也留了自由的缝隙。"
+      order: high ? "画面有秩序，你在试着把事放回位置。" : low ? "结构自由，你不愿被规则框住。" : "有秩序，也留了自由的缝隙。",
+      egoStrength: high ? "你愿意占据空间，也用得上力气。" : low ? "你把自己收得很小，力气也放轻了。" : "力量在那里，只是还没完全拿出来。",
+      completeness: high ? "内在有一个中心在收拢，整体感在形成。" : low ? "能量还在弥散，中心感尚未凝聚。" : "有聚拢的苗头，也留了散开的余地。",
+      visualBalance: high ? "画面的重量分布均匀，内在相对稳定。" : low ? "重量偏向一侧，有一股拉力在起作用。" : "大体平衡，某一方向略占上风。"
     };
     return map[key] || "";
   }

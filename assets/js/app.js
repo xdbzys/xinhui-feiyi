@@ -343,7 +343,7 @@
 
   function normalizeReport(ai, fallback) {
     const out = Object.assign({}, fallback, ai || {});
-    const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "strength", "whisper", "process", "mood",
+    const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "dynamics", "strength", "whisper", "process", "mood",
       "alternative", "confidence", "limitations"];
     strKeys.forEach((k) => {
       if (!out[k] || typeof out[k] !== "string") out[k] = fallback[k];
@@ -573,6 +573,8 @@
     $("#reportColor").textContent = r.colors;
     $("#reportLine").textContent = r.lines;
     $("#reportSpace").textContent = r.space;
+    const dynEl = $("#reportDynamics");
+    if (dynEl) dynEl.textContent = r.dynamics || "";
     $("#reportDate").textContent = window.XHFYReport.dateText();
     $("#reportNo").textContent = window.XHFYReport.reportNo();
     $("#reportDrawing").src = a.imageDataURL;

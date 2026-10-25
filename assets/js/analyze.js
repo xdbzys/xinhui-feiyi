@@ -256,6 +256,98 @@
     }
     const symmetry = union ? inter / union : 0;
 
+    // 上下镜像对称（Arnheim 视觉平衡、Jung 完形的双轴对称线索）
+    let interV = 0, unionV = 0;
+    for (let y = 0; y < AH; y++) {
+      for (let x = 0; x < AW; x++) {
+        const a = mask[y * AW + x];
+        const b = mask[(AH - 1 - y) * AW + x];
+        if (a || b) unionV++;
+        if (a && b) interV++;
+      }
+    }
+    const symmetryV = unionV ? interV / unionV : 0;
+
+    // 中心聚集度（Jung 曼陀罗中心性）：笔迹到几何中心的平均距离归一化
+    // 0=全部贴边，1=全部在中心；值越高表示越向中心收拢
+    let distSum = 0;
+    for (let y = 0; y < AH; y++) {
+      for (let x = 0; x < AW; x++) {
+        if (mask[y * AW + x]) {
+          const dx = (x / AW - 0.5) * 2;   // -1..1
+          const dy = (y / AH - 0.5) * 2;
+          distSum += Math.sqrt(dx * dx + dy * dy);
+        }
+      }
+    }
+    const centerConvergence = inkCount
+      ? clamp(1 - (distSum / inkCount) / Math.SQRT2, 0, 1)
+      : 0;
+
+    // 四象限平衡（Jung 曼陀罗四象限均衡）：四个象限笔墨占比的均匀度
+    // 用 1 - 标准差/均值 的形式，0=极度失衡，1=完全均衡
+    const qWeights = [0, 0, 0, 0]; // 左上、右上、左下、右下
+    for (let y = 0; y < AH; y++) {
+      for (let x = 0; x < AW; x++) {
+        if (mask[y * AW + x]) {
+          const qi = (y < AH / 2 ? 0 : 2) + (x < AW / 2 ? 0 : 1);
+          qWeights[qi]++;
+        }
+      }
+    }
+    const qTotal = qWeights.reduce((a, b) => a + b, 0) || 1;
+    const qRatios = qWeights.map((v) => v / qTotal);
+    const qMean = 0.25;
+    const qVar = qRatios.reduce((a, r) => a + (r - qMean) * (r - qMean), 0) / 4;
+    const quadrantBalance = clamp(1 - Math.sqrt(qVar) / qMean, 0, 1);
+
+    // 视觉平衡度（Arnheim）：重心偏离几何中心的程度 + 双轴对称
+    // 重心越接近中心、双轴对称越高 → 视觉越平衡
+    const cx0 = inkCount ? sumX / inkCount / AW : 0.5;
+    const cy0 = inkCount ? sumY / inkCount / AH : 0.5;
+    const centroidOffset = Math.sqrt((cx0 - 0.5) * 2 * (cx0 - 0.5) * 2 + (cy0 - 0.5) * 2 * (cy0 - 0.5) * 2);
+    const visualBalance = clamp(
+      (1 - centroidOffset / Math.SQRT2) * 0.55 + (symmetry + symmetryV) / 2 * 0.45,
+      0, 1
+    );
+
+    // 闭合结构检测（Jung 完形）：用简单的包围检测——
+    // 若笔迹在水平/垂直方向上形成「中间被围」的区域，则认为有闭合结构。
+    // 简化版：统计 mask 中「上下左右都有笔迹」的背景像素比例，作为闭合度线索。
+    let enclosed = 0;
+    for (let y = 1; y < AH - 1; y++) {
+      for (let x = 1; x < AW - 1; x++) {
+        if (!mask[y * AW + x]) {
+          let left = false, right = false, up = false, down = false;
+          for (let k = 1; k < 12; k++) {
+            if (x - k < 0) break;
+            if (mask[y * AW + (x - k)]) { left = true; break; }
+          }
+          if (left) {
+            for (let k = 1; k < 12; k++) {
+              if (x + k >= AW) break;
+              if (mask[y * AW + (x + k)]) { right = true; break; }
+            }
+          }
+          if (right) {
+            for (let k = 1; k < 12; k++) {
+              if (y - k < 0) break;
+              if (mask[(y - k) * AW + x]) { up = true; break; }
+            }
+          }
+          if (up) {
+            for (let k = 1; k < 12; k++) {
+              if (y + k >= AH) break;
+              if (mask[(y + k) * AW + x]) { down = true; break; }
+            }
+          }
+          if (left && right && up && down) enclosed++;
+        }
+      }
+    }
+    const enclosedRatio = enclosed / Math.max(1, total - inkCount);
+    const hasClosure = enclosedRatio > 0.008;
+
     // 重心与分区
     const cx = inkCount ? sumX / inkCount / AW : 0.5;
     const cy = inkCount ? sumY / inkCount / AH : 0.5;
@@ -355,6 +447,11 @@
     const tintRatio = inkCount ? 1 - neutralRatio : 0;
     const repeatedInk = stats.soft > 3 && hueEntropy < 0.55;
 
+    // 画面大小：以笔迹包围盒占画面的比例衡量（《中学生绘画心理应用手册》阈值：>2/3 过大，<1/9 过小）
+    const bboxW = maxX >= 0 ? (maxX - minX + 1) : 0;
+    const bboxH = maxY >= 0 ? (maxY - minY + 1) : 0;
+    const bboxRatio = inkCount ? (bboxW * bboxH) / (AW * AH) : 0;
+
     const scores = {
       warmth: clamp(30 + (warmRatio - coolRatio) * 52 + satAvg * 30 - neutralRatio * 6, 6, 96),
       tension: clamp(
@@ -372,7 +469,35 @@
       space: clamp(96 - coverage * 125, 10, 96),
       grounded: clamp(42 + (bottomWeight - 0.33) * 105 + (0.5 - Math.abs(cx - 0.5)) * 42 + symmetry * 18, 6, 96),
       vitality: clamp(12 + tintRatio * 30 + satAvg * 40 + greenRatio * 60 + softRatio * 10 + Math.min(coverage, 0.5) * 40, 4, 96),
-      order: clamp(symmetry * 48 + (orientTotal > 0 ? (1 - orientEntropy) * 38 : 0) + (hueTotal > 0 ? (1 - hueEntropy) * 14 : 0), 6, 96)
+      order: clamp(symmetry * 48 + (orientTotal > 0 ? (1 - orientEntropy) * 38 : 0) + (hueTotal > 0 ? (1 - hueEntropy) * 14 : 0), 6, 96),
+      // 自我力量（Koch 树木 / Machover 画人：画面大小 + 笔触力度 + 线条质量）
+      egoStrength: clamp(
+        18 +
+        Math.min(bboxRatio / 0.6, 1) * 28 +   // 画面占比：愿意占据空间
+        strengthN * 22 +                       // 笔触力度：能量投入
+        (orientTotal > 0 ? orientEntropy * 12 : 0) +  // 方向变化：灵活度
+        (lineRatio > 0.3 ? 8 : 0) +            // 直线占比：果断
+        (hasClosure ? 8 : 0),                  // 闭合结构：自我边界
+        6, 96
+      ),
+      // 完形程度（Jung 曼陀罗：中心聚集 + 四象限平衡 + 对称 + 闭合）
+      completeness: clamp(
+        10 +
+        centerConvergence * 28 +
+        quadrantBalance * 24 +
+        (symmetry + symmetryV) / 2 * 20 +
+        (hasClosure ? 14 : 0) +
+        Math.min(coverage / 0.15, 1) * 8,
+        4, 96
+      ),
+      // 视觉平衡（Arnheim：重心偏移 + 双轴对称 + 四象限均衡）
+      visualBalance: clamp(
+        visualBalance * 50 +
+        quadrantBalance * 28 +
+        (symmetry + symmetryV) / 2 * 14 +
+        (0.5 - Math.abs(cx - 0.5)) * 8,
+        6, 96
+      )
     };
     Object.keys(scores).forEach((k) => (scores[k] = Math.round(scores[k])));
 
@@ -446,10 +571,6 @@
         ? "偏下"
         : "纵向居中";
 
-    // 画面大小：以笔迹包围盒占画面的比例衡量（《中学生绘画心理应用手册》阈值：>2/3 过大，<1/9 过小）
-    const bboxW = maxX >= 0 ? (maxX - minX + 1) : 0;
-    const bboxH = maxY >= 0 ? (maxY - minY + 1) : 0;
-    const bboxRatio = inkCount ? (bboxW * bboxH) / (AW * AH) : 0;
     // 画面切断：笔迹是否顶到画纸四边
     const cutoff = [];
     if (minX <= 1) cutoff.push("左");
@@ -493,6 +614,13 @@
         orientationEntropy: round(orientEntropy),
         hueEntropy: round(hueEntropy),
         symmetry: round(symmetry),
+        symmetryV: round(symmetryV),
+        centerConvergence: round(centerConvergence),
+        quadrantBalance: round(quadrantBalance),
+        visualBalance: round(visualBalance),
+        enclosedRatio: round(enclosedRatio),
+        hasClosure,
+        qRatios: qRatios.map(round),
         centroid: { x: round(cx), y: round(cy) },
         topWeight: round(topWeight),
         bottomWeight: round(bottomWeight),
@@ -520,6 +648,26 @@
         vertBias,
         sizeBias: bboxRatio > 2 / 3 ? "画面过大" : bboxRatio < 1 / 9 ? "画面偏小" : "大小适中",
         cutoff: cutoff.length ? cutoff.join("、") + "侧切断" : "未切断"
+      },
+      // Jung 曼陀罗派生特征（中心性 / 四象限 / 完形）
+      jung: {
+        centerConvergence: round(centerConvergence),
+        centerPattern: centerConvergence > 0.55 ? "向中心聚集" : centerConvergence < 0.3 ? "偏离中心" : "分布弥散",
+        quadrantBalance: round(quadrantBalance),
+        quadrantPattern: quadrantBalance > 0.7 ? "四象限均衡" : "四象限失衡",
+        quadrants: qRatios.map((r, i) => ["左上", "右上", "左下", "右下"][i] + " " + Math.round(r * 100) + "%"),
+        closure: hasClosure ? "有闭合结构" : "结构开放",
+        symmetry: "左右 " + Math.round(symmetry * 100) + "% / 上下 " + Math.round(symmetryV * 100) + "%"
+      },
+      // Arnheim 视觉动力派生特征（重心 / 平衡 / 运动）
+      arnheim: {
+        visualBalance: round(visualBalance),
+        balancePattern: visualBalance > 0.6 ? "视觉平衡" : "视觉张力偏侧",
+        centroidBias: (Math.abs(cy - 0.5) > 0.1 ? (cy < 0.5 ? "重心偏上" : "重心偏下") : "重心居中") +
+          " / " + (Math.abs(cx - 0.5) > 0.1 ? (cx < 0.5 ? "偏左" : "偏右") : "横向居中"),
+        movement: lineDirection === "斜向为主" ? "斜线暗示运动趋势" :
+          lineDirection === "方向多变" ? "多方向能量交织" : "方向稳定",
+        edgeWeight: cutoff.length > 0 ? "边缘有重量（" + cutoff.join("、") + "侧）" : "边缘无明显重量"
       },
       // FEATS 形式元素评分（0–5，含「不适用」项）
       feats,

@@ -1953,6 +1953,22 @@ a { color: inherit; }
 }
 .report-caveat b { display: block; font-family: var(--serif); font-size: 11.5px; letter-spacing: 0.08em; margin-bottom: 6px; color: var(--ink); }
 .report-caveat p { margin: 0 0 6px; font-size: 11.3px; line-height: 1.9; }
+
+/* 完形与视觉动力（Jung / Arnheim / Koch / Machover） */
+.report-dynamics-note {
+  font-size: 11.5px;
+  color: var(--ink-mute);
+  line-height: 1.85;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(120, 100, 70, 0.05);
+  border-left: 2px solid rgba(120, 100, 70, 0.3);
+}
+#reportDynamics {
+  font-size: 13px;
+  line-height: 2;
+  color: var(--ink-soft);
+}
 @media (max-width: 720px) {
   .report-feats-list { grid-template-columns: 1fr; }
 }
