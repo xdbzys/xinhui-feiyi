@@ -1698,44 +1698,5 @@
     return out;
   }
 
-  /** 智能匹配工艺：根据画面线条特征自动选择最契合的非遗门类 */
-  function autoMatchCraft(analysis) {
-    const s = (analysis && analysis.scores) || {};
-    const m = (analysis && analysis.metrics) || {};
-    const htp = (analysis && analysis.htp) || {};
-    const orientEntropy = m.orientationEntropy || 0.5;
-    const bboxRatio = m.bboxRatio || 0.2;
-    const coverage = m.coverage || 0.1;
-    const hueEntropy = m.hueEntropy || 0.5;
-    const tension = s.tension || 50;
-    const order = s.order || 50;
-    const lineDir = htp.lineDirection || "方向多变";
-
-    // 极简单线条（儿童涂鸦）：剪纸，用繁复镂空丰富它
-    if (bboxRatio < 0.12 && coverage < 0.06 && orientEntropy > 0.6) {
-      return "papercut";
-    }
-    // 乱线团（高覆盖、高方向熵、低秩序）：扎染，用蓝色晕染化解
-    if (coverage > 0.22 && orientEntropy > 0.7 && order < 45) {
-      return "tiedye";
-    }
-    // 直线交接（水平/垂直为主、秩序高）：竹编，经纬交织
-    if ((lineDir.indexOf("水平") >= 0 || lineDir.indexOf("垂直") >= 0) && order > 55) {
-      return "bamboo";
-    }
-    // 圆润交织（方向多变但覆盖适中）：刺绣，丝理针脚
-    if (orientEntropy > 0.55 && coverage > 0.08 && coverage < 0.2 && tension < 60) {
-      return "embroidery";
-    }
-    // 曲折有张力（高张力、低覆盖）：皮影，镂雕关节
-    if (tension > 60 && coverage < 0.15) {
-      return "shadow";
-    }
-    // 其余：按秩序感与色调数兜底
-    if (order > 60) return "bamboo";
-    if (hueEntropy > 0.6) return "embroidery";
-    return "papercut";
-  }
-
-  window.XHFYCraft = { render, renderAI, META, autoMatchCraft };
+  window.XHFYCraft = { render, renderAI, META };
 })();

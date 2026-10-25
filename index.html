@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=b72f9c1">
+<link rel="stylesheet" href="assets/css/style.css?v=a1e9c47">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -349,9 +349,6 @@
           <button class="craft-tab" data-style="embroidery" role="tab" aria-selected="false">
             <i class="swatch swatch-embroidery"></i><strong>刺绣</strong><em>丝理针脚</em>
           </button>
-          <button class="craft-tab craft-auto" id="craftAutoBtn" role="tab" aria-selected="false">
-            <i class="swatch swatch-auto"></i><strong>智能匹配</strong><em>AI 选工艺</em>
-          </button>
         </div>
 
         <div class="craft-stage">
@@ -360,7 +357,7 @@
             <span class="craft-badge" id="craftBadge">非遗剪纸</span>
             <div class="craft-loading" id="craftLoading" hidden><i></i><span>AI 正在重绘纹样…</span></div>
             <div class="ai-craft-empty" id="aiCraftEmpty">
-              <p>AI 只生成一张满版的非遗纹样材质，再按你的真实笔迹裁切。构图、主体位置与留白和你画的完全一致，变化的是材质与纹样语法。</p>
+              <p>AI 会先读懂你线条里的潜意识，联想出一个具象意象，再用繁复的非遗纹样补满线条之间的空白，整幅重构为一件展品，最后把你的原笔迹轻轻叠回作为骨架。</p>
               <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">生成 AI 非遗二创</button>
             </div>
           </div>
@@ -378,7 +375,7 @@
               <button id="aiRedraw" class="btn btn-primary" type="button"><span>AI 二创当前工艺</span><i>✦</i></button>
               <button id="downloadPattern" class="btn btn-ghost" type="button" hidden>下载 AI 二创稿</button>
             </div>
-            <p class="ai-redraw-note" id="aiRedrawNote">形状来自你的笔迹：AI 负责非遗材质与纹样语法，前端按你的真实笔迹裁切，所以走向、位置与留白和你画的一一对应。</p>
+            <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出 AI 读到的意象与工艺：它把你的线条当作主骨架，用祥云纹、缠枝纹、回字纹填满空白，再以该工艺的材质与光影成画。</p>
             <div class="ai-art-meta" id="aiArtMeta" hidden>
               <span id="aiArtTitle">AI 二创 · 保留原构图</span>
               <a href="#" id="aiArtDownload" hidden>下载 AI 二创稿 ↓</a>
@@ -390,7 +387,7 @@
         <div class="mapping-row">
           <div class="mapping-step"><span>提取</span><p>识别画面元素、主色与笔迹走向</p></div>
           <div class="mapping-arrow">→</div>
-          <div class="mapping-step"><span>转译</span><p>AI 生成非遗纹样材质，按你的笔迹裁切</p></div>
+          <div class="mapping-step"><span>转译</span><p>AI 读出意象，用非遗纹样补满空白并整幅重构</p></div>
           <div class="mapping-arrow">→</div>
           <div class="mapping-step"><span>落地</span><p>输出可打印、可剪裁、可再创作的非遗底稿</p></div>
         </div>
@@ -628,13 +625,13 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=b72f9c1"></script>
-<script src="assets/js/paint.js?v=b72f9c1"></script>
-<script src="assets/js/analyze.js?v=b72f9c1"></script>
-<script src="assets/js/craft.js?v=b72f9c1"></script>
-<script src="assets/js/knowledge.js?v=b72f9c1"></script>
-<script src="assets/js/ai.js?v=b72f9c1"></script>
-<script src="assets/js/report.js?v=b72f9c1"></script>
-<script src="assets/js/app.js?v=b72f9c1"></script>
+<script src="assets/js/config.js?v=a1e9c47"></script>
+<script src="assets/js/paint.js?v=a1e9c47"></script>
+<script src="assets/js/analyze.js?v=a1e9c47"></script>
+<script src="assets/js/craft.js?v=a1e9c47"></script>
+<script src="assets/js/knowledge.js?v=a1e9c47"></script>
+<script src="assets/js/ai.js?v=a1e9c47"></script>
+<script src="assets/js/report.js?v=a1e9c47"></script>
+<script src="assets/js/app.js?v=a1e9c47"></script>
 </body>
 </html>

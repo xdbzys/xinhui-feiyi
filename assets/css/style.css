@@ -1234,7 +1234,7 @@ a { color: inherit; }
 
 .craft-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   border: 1px solid var(--line);
   border-bottom: 0;
   background: rgba(252, 249, 242, 0.6);
@@ -1287,10 +1287,6 @@ a { color: inherit; }
 .swatch-bamboo { background: repeating-linear-gradient(0deg, #c9a96a 0 3px, #a8844e 3px 6px), repeating-linear-gradient(90deg, transparent 0 5px, rgba(80, 62, 35, 0.28) 5px 6px); }
 .swatch-shadow { background: radial-gradient(circle at 50% 40%, #e8c88a 0 12%, #c97b4a 40%, #7a2e1e 85%); }
 .swatch-embroidery { background: linear-gradient(135deg, #e0a8b0 0%, #b23a48 50%, #6b8fa8 100%); }
-.swatch-auto { background: conic-gradient(#c85945, #2b4a6b, #c9a96a, #7a2e1e, #b23a48, #c85945); }
-
-.craft-auto { border: 1.5px dashed var(--gold-soft); }
-.craft-auto.active { border-color: var(--gold); background: rgba(196,163,96,0.12); }
 
 .craft-view-switch {
   display: flex;
