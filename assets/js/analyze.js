@@ -62,6 +62,7 @@
     let darkInk = 0;
     let sumX = 0;
     let sumY = 0;
+    let minX = AW, minY = AH, maxX = -1, maxY = -1;
     let warm = 0;
     let cool = 0;
     let green = 0;
@@ -95,6 +96,10 @@
           if (L < 100) darkInk++;
           sumX += x;
           sumY += y;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
           grid[gi]++;
 
           const hsl = rgbToHsl(r, g, b);
@@ -388,10 +393,22 @@
         ? "偏下"
         : "纵向居中";
 
+    // 画面大小：以笔迹包围盒占画面的比例衡量（《中学生绘画心理应用手册》阈值：>2/3 过大，<1/9 过小）
+    const bboxW = maxX >= 0 ? (maxX - minX + 1) : 0;
+    const bboxH = maxY >= 0 ? (maxY - minY + 1) : 0;
+    const bboxRatio = inkCount ? (bboxW * bboxH) / (AW * AH) : 0;
+    // 画面切断：笔迹是否顶到画纸四边
+    const cutoff = [];
+    if (minX <= 1) cutoff.push("左");
+    if (maxX >= AW - 2) cutoff.push("右");
+    if (minY <= 1) cutoff.push("上");
+    if (maxY >= AH - 2) cutoff.push("下");
+
     return {
       scores,
       metrics: {
         coverage: round(coverage),
+        bboxRatio: round(bboxRatio),
         edgeDensity: round(edgeDensity),
         edgeStrength: round(edgeStrength),
         orientationEntropy: round(orientEntropy),
@@ -422,7 +439,8 @@
         repeated,
         horizBias,
         vertBias,
-        sizeBias: coverage > 0.32 ? "画面偏大" : coverage < 0.07 ? "画面偏小" : "大小适中"
+        sizeBias: bboxRatio > 2 / 3 ? "画面过大" : bboxRatio < 1 / 9 ? "画面偏小" : "大小适中",
+        cutoff: cutoff.length ? cutoff.join("、") + "侧切断" : "未切断"
       },
       strokeStats: stats,
       process,
