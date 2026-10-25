@@ -742,7 +742,7 @@
 
     // 原笔迹叠回：multiply 保留骨架的走向与位置，又不破坏纹样的色彩层次
     ctx.save();
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.4;
     ctx.globalCompositeOperation = "multiply";
     ctx.drawImage(inkLayer(s), 0, 0);
     ctx.restore();

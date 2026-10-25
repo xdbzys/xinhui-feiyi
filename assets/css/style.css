@@ -1349,7 +1349,7 @@ a { color: inherit; }
   height: calc(100% - 24px);
   pointer-events: none;
   mix-blend-mode: multiply;
-  opacity: 0.3;
+  opacity: 0.4;
   z-index: 1;
 }
 #aiInkOverlay[hidden] { display: none; }
