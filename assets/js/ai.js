@@ -64,8 +64,8 @@
     const relay = (AI.relay || "").trim();
 
     // 尝试顺序：直连 → 中继（如果配置了）
-    // images/generations 支持 CORS 可直连；chat/completions 不支持预检，
-    // 直连会因 CORS 失败，此时走中继；中继也不可用时调用方降级到本地引擎。
+    // www.bigmodel.cn 对 chat/vision/images 全部支持 CORS，直连即可；
+    // 若自定义了中继则作为兜底。直连失败时调用方降级到本地引擎。
     const attempts = [];
     attempts.push({ url: full, label: "直连" });
     if (relay) attempts.push({ url: relay.replace("{url}", encodeURIComponent(full)), label: "中继" });
@@ -206,7 +206,7 @@
         "；氛围:" + (v.mood || "无") + "；观察:" + (v.note || "无"),
       "【用户自述】" + (userText || "无"),
       "",
-      window.XHFYKnowledge.buildKnowledgeBlockCompact(),
+      window.XHFYKnowledge.buildKnowledgeBlockRich(),
       "",
       "严格输出 JSON（中文，无 markdown），字段：",
       JSON.stringify({
@@ -232,9 +232,9 @@
     ], {
       model: AI.textModel,
       temperature: 0.85,
-      maxTokens: 1400,
+      maxTokens: 1700,
       json: true,
-      timeout: 75000
+      timeout: 90000
     });
 
     const parsed = extractJSON(content);

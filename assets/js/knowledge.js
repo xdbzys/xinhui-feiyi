@@ -385,9 +385,40 @@
     return out.join("\n");
   }
 
+  /**
+   * 丰富版知识库：供 report() 使用（AI 已可直连时启用）。
+   * 保留空间/线条/色彩/元素/留白的完整解读细节，以及 EAT 与正念手作原则全文，
+   * 让 AI 能组织出有依据、有层次的心理观察，而不是套模板短句。
+   * 调节方法仍只给 id+名称+标签，具体步骤由本地渲染。
+   */
+  function buildKnowledgeBlockRich() {
+    const out = ["【可援引的知识库（仅作语言组织的边界，不得编造未列出的结论）】"];
+    out.push("— 空间位置（HTP）—");
+    spatial.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 线条与笔触 —");
+    lines.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩情绪 —");
+    Object.keys(colors).forEach((k) => out.push("· " + colors[k].name + "：" + colors[k].emotion));
+    out.push("— 常见画面元素 —");
+    elements.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 空间留白 —");
+    space.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 表达性艺术治疗原则（EAT）—");
+    eatPrinciples.forEach((p) => out.push("· " + p));
+    out.push("— 正念手作原则 —");
+    craftPrinciples.forEach((p) => out.push("· " + p));
+    out.push("— 可推荐的情绪调节方法（只能从这里选择 id，步骤与科学依据由系统本地提供）—");
+    regulations.forEach((r) => {
+      out.push("· " + r.id + "：" + r.name + "（" + r.tag + "，" + r.duration + "）");
+    });
+    out.push("— 必须遵守的边界 —");
+    boundaries.forEach((b) => out.push("· " + b));
+    return out.join("\n");
+  }
+
   window.XHFYKnowledge = {
     spatial, lines, colors, elements, space, eatPrinciples, craftPrinciples,
     regulations, behaviorRules, boundaries,
-    recommendRegulation, buildKnowledgeBlock, buildKnowledgeBlockCompact
+    recommendRegulation, buildKnowledgeBlock, buildKnowledgeBlockCompact, buildKnowledgeBlockRich
   };
 })();
