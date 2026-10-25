@@ -765,8 +765,11 @@
   /** 在剪影内部按纹理格律镂空——剪纸的本质是「镂空」而非填色 */
   function carveHoles(ctx, s, spacing, style) {
     const data = ctx.getImageData(0, 0, s, s).data;
-    const r = s * (style === "calico" ? 0.010 : 0.0115);
-    const kinds = style === "calico" ? ["petal", "dot", "petal"] : ["crescent", "crescent", "dot"];
+    let r = s * 0.0115;
+    let kinds = ["crescent", "crescent", "dot"];
+    if (style === "calico") { r = s * 0.010; kinds = ["petal", "dot", "petal"]; }
+    else if (style === "shadow") { r = s * 0.009; kinds = ["dot", "crescent", "dot"]; }
+    else if (style === "embroidery") { r = s * 0.007; kinds = ["dot", "dot", "petal"]; }
     let n = 0;
     for (let y = spacing * 0.55; y < s; y += spacing) {
       for (let x = spacing * 0.55; x < s; x += spacing) {
@@ -844,6 +847,14 @@
     } else if (st === "bamboo") {
       scallopDilate(ctx, ink, s * 0.014);
       carveLines(ctx, s, "bamboo");
+    } else if (st === "shadow") {
+      // 皮影：剪影偏薄，镂雕小开口透影
+      scallopDilate(ctx, ink, s * 0.013);
+      carveHoles(ctx, s, s * 0.065, "shadow");
+    } else if (st === "embroidery") {
+      // 刺绣：轮廓略膨胀，内部用细小针孔模拟透气
+      scallopDilate(ctx, ink, s * 0.015);
+      carveHoles(ctx, s, s * 0.04, "embroidery");
     } else {
       scallopDilate(ctx, ink, s * 0.017);
       carveHoles(ctx, s, s * 0.055, st);
@@ -865,6 +876,11 @@
   function paperColor(style, analysis) {
     if (style === "tiedye" || style === "calico") return "#22456B";
     if (style === "bamboo") return "#8A6A3B";
+    if (style === "shadow") return "#7A2E1E";
+    if (style === "embroidery") {
+      const dc = (analysis && analysis.dominantColors) || [];
+      return (dc[0] && dc[0].hex) || "#B23A48";
+    }
     const dc = (analysis && analysis.dominantColors) || [];
     const warm = dc.find((c) => /红|橙|朱|赭|黄|暖|绯|丹|落日/.test(c.name || ""));
     return (warm && warm.hex) || "#A63A2B";
@@ -1099,6 +1115,32 @@
     $$(".craft-tab").forEach((b) => {
       b.addEventListener("click", () => {
         if (state.busy) return;
+        // 智能匹配按钮：根据画面特征自动选择最契合的工艺
+        if (b.id === "craftAutoBtn") {
+          if (!state.analysis) {
+            toast("先画几笔并完成分析，才能智能匹配工艺");
+            return;
+          }
+          const matched = window.XHFYCraft.autoMatchCraft(state.analysis);
+          const meta = window.XHFYCraft.META[matched];
+          state.craftStyle = matched;
+          selectCraftTab(matched);
+          if (state.aiImageURL && state.aiBaseStyle !== matched) resetAiArt();
+          updateCraftInfo(matched);
+          if (state.report && state.analysis) {
+            const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision);
+            if (state.report.guide && state.report.craft.style !== matched) delete state.report.guide;
+            state.report.craft.style = matched;
+            state.report.craft.reason = fb.craft.reason;
+            state.report.craft.elements = fb.craft.elements;
+            $("#reportCraftReason").textContent = fb.craft.reason;
+            $("#reportCraftName").textContent = meta.name;
+            $("#craftElements").textContent = fb.craft.elements;
+            renderGuide();
+          }
+          toast("智能匹配：你的线条最契合「" + meta.short + "」，已为你切换");
+          return;
+        }
         const style = b.dataset.style;
         if (style === state.craftStyle) return;
         state.craftStyle = style;

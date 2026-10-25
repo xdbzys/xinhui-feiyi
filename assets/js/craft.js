@@ -49,6 +49,26 @@
       use: "竹编画 / 杯垫 / 灯罩底稿",
       note: "小提示：深色笔触会成为竹编里的阴面，浅色则像被光穿透的竹篾。",
       palette: ["#C9A96A", "#8C6E3F", "#4A3B26"]
+    },
+    shadow: {
+      name: "非遗皮影 · 镂雕皮影",
+      badge: "非遗皮影",
+      short: "皮影",
+      desc: "把你的线条镂刻成一张皮影。关节处留一道细线，让剪影有了可以活动的生命，在暖光里投出灵动的影子。",
+      grammar: "剪影 · 关节线 · 镂雕 · 暖光透影",
+      use: "皮影戏底稿 / 装饰画 / 灯箱片",
+      note: "小提示：皮影靠光活着。画里的每一道开口，都是光透过来的地方。",
+      palette: ["#8B3A2A", "#C97B4A", "#E8C88A"]
+    },
+    embroidery: {
+      name: "非遗刺绣 · 丝理针脚",
+      badge: "非遗刺绣",
+      short: "刺绣",
+      desc: "把你的笔触化成丝线。一针一线地走，缎面铺满、打籽点缀，让心象在绸缎上有了丝绒的温度与光泽。",
+      grammar: "缎绣 · 打籽 · 套针 · 丝理",
+      use: "刺绣画稿 / 团扇 / 服饰纹样",
+      note: "小提示：刺绣最讲究「丝理」——线条的方向就是丝线的走向，顺着它绣才会发亮。",
+      palette: ["#B23A48", "#E0A8B0", "#6B8FA8"]
     }
   };
 
@@ -1183,6 +1203,242 @@
     sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, "rgba(74,59,38,0.9)", "#EFDFC0");
   }
 
+  /* ---------------- 皮影 ---------------- */
+  function drawShadow(ctx, W, maskData, rng) {
+    const { mask, edge, core, centroid } = maskData;
+
+    // 暖黄羊皮纸底：半透明、带纤维与烫痕
+    paperBase(ctx, W, "#F2E0B8", rng);
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    const id = ctx.getImageData(0, 0, W, W);
+    for (let i = 0; i < W * W; i++) {
+      const v = (Math.sin(i * 0.21) + Math.sin(i * 0.013)) * 4;
+      id.data[i * 4] = clamp(id.data[i * 4] + v, 0, 255);
+      id.data[i * 4 + 1] = clamp(id.data[i * 4 + 1] + v * 0.8, 0, 255);
+      id.data[i * 4 + 2] = clamp(id.data[i * 4 + 2] - 2, 0, 255);
+    }
+    ctx.putImageData(id, 0, 0);
+    ctx.restore();
+
+    // 背后暖光：从中心透出的橘黄光，模拟灯箱
+    const warm = ctx.createRadialGradient(W / 2, W / 2, W * 0.08, W / 2, W / 2, W * 0.72);
+    warm.addColorStop(0, "rgba(255,196,120,0.42)");
+    warm.addColorStop(0.5, "rgba(255,170,90,0.18)");
+    warm.addColorStop(1, "rgba(180,100,50,0)");
+    ctx.fillStyle = warm;
+    ctx.fillRect(0, 0, W, W);
+
+    // 皮影剪影：深褐偏红，半透明让光透出
+    const shadowColor = "#7A2E1E";
+    const silhouette = colorize(mask, W, shadowColor, 0.92);
+    // 投影偏移
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.filter = "blur(" + Math.max(3, W * 0.006) + "px)";
+    ctx.drawImage(colorize(mask, W, "#3A1410", 0.6), W * 0.008, W * 0.01);
+    ctx.restore();
+    ctx.drawImage(silhouette, 0, 0);
+
+    // 镂雕开口：在剪影厚实处开出云纹与圆点孔，让光透过来
+    const carve = document.createElement("canvas");
+    carve.width = W; carve.height = W;
+    const cc = carve.getContext("2d");
+    cloudMotif(cc, W * 0.5, W * 0.5, W * 0.025, "#F2E0B8", 0.85);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const rr = W * (0.1 + (i % 4) * 0.04);
+      crescentCut(cc, W / 2 + Math.cos(a) * rr, W / 2 + Math.sin(a) * rr, W * 0.008, "#F2E0B8", 0.7);
+    }
+    cc.globalCompositeOperation = "destination-in";
+    cc.drawImage(maskCanvas(core, W), 0, 0);
+    ctx.drawImage(carve, 0, 0);
+
+    // 关节线：皮影各部件之间的细线连接，是皮影最标志性的特征
+    ctx.save();
+    ctx.strokeStyle = "rgba(242,224,184,0.7)";
+    ctx.lineWidth = Math.max(1, W * 0.0016);
+    ctx.setLineDash([W * 0.012, W * 0.008]);
+    // 横向关节线
+    for (let y = W * 0.2; y < W * 0.85; y += W * 0.18) {
+      ctx.beginPath();
+      ctx.moveTo(W * 0.1, y);
+      ctx.lineTo(W * 0.9, y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // 关节铆钉
+    ctx.fillStyle = "rgba(242,224,184,0.85)";
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const rr = W * 0.22;
+      const jx = centroid.x + Math.cos(a) * rr;
+      const jy = centroid.y + Math.sin(a) * rr;
+      ctx.beginPath();
+      ctx.arc(jx, jy, W * 0.006, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 描边压深
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.globalCompositeOperation = "multiply";
+    ctx.drawImage(edgeCanvas(edge, W, "#3A1410", 0.5), 0, 0);
+    ctx.restore();
+
+    // 边框：双线 + 卷草纹
+    const m = W * 0.042;
+    ctx.save();
+    ctx.strokeStyle = "#7A2E1E";
+    ctx.lineWidth = Math.max(2, W * 0.004);
+    ctx.strokeRect(m, m, W - m * 2, W - m * 2);
+    ctx.lineWidth = Math.max(0.8, W * 0.0012);
+    ctx.globalAlpha = 0.6;
+    ctx.strokeRect(m * 1.16, m * 1.16, W - m * 2.32, W - m * 2.32);
+    ctx.restore();
+
+    // 四角如意云纹
+    [[m * 2, m * 2], [W - m * 2, m * 2], [m * 2, W - m * 2], [W - m * 2, W - m * 2]].forEach(([x, y]) =>
+      cloudMotif(ctx, x, y, W * 0.022, "#7A2E1E", 0.85));
+
+    sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, "#7A2E1E", "#F2E0B8");
+  }
+
+  /* ---------------- 刺绣 ---------------- */
+  function drawEmbroidery(ctx, W, maskData, rng) {
+    const { mask, edge, core, centroid } = maskData;
+
+    // 绸缎底：暗雅的素色缎面，带经向光泽
+    ctx.fillStyle = "#E8DCC8";
+    ctx.fillRect(0, 0, W, W);
+    // 缎面光泽：水平方向的微妙渐变带
+    for (let i = 0; i < 30; i++) {
+      const y = (i / 30) * W;
+      const g = ctx.createLinearGradient(0, y, 0, y + W / 30);
+      const t = (Math.sin(i * 0.7) + 1) / 2;
+      g.addColorStop(0, "rgba(255,255,255," + (0.03 + t * 0.06) + ")");
+      g.addColorStop(1, "rgba(180,160,130," + (0.02 + t * 0.03) + ")");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y, W, W / 30 + 1);
+    }
+    // 绸缎细纹
+    ctx.save();
+    ctx.globalAlpha = 0.04;
+    ctx.strokeStyle = "#8B7355";
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < W; x += Math.max(1.5, W / 600)) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, W); ctx.stroke();
+    }
+    ctx.restore();
+
+    // 绣线色系：从用户主色派生，用多层次丝线
+    const dc = (window.XHFY_LAST_COLORS && window.XHFY_LAST_COLORS[0]) || "#B23A48";
+    const threadColors = [dc, "#D4556A", "#8C2A38", "#E8B4BC"];
+
+    // 缎绣铺底：在剪影内部填充有方向的丝理
+    const stitch = document.createElement("canvas");
+    stitch.width = W; stitch.height = W;
+    const sctx = stitch.getContext("2d");
+    sctx.drawImage(colorize(mask, W, threadColors[0], 0.9), 0, 0);
+    // 丝理线：沿着笔触方向排布短平行线，模拟缎绣
+    sctx.save();
+    sctx.globalCompositeOperation = "source-atop";
+    const strokeAng = (window.XHFY_LAST_STROKE_ANG || 45) * Math.PI / 180;
+    for (let y = 0; y < W; y += Math.max(2, W * 0.004)) {
+      for (let x = 0; x < W; x += Math.max(2, W * 0.004)) {
+        if (mask[Math.floor(y) * W + Math.floor(x)] < 0.5) continue;
+        const len = W * (0.012 + rng() * 0.01);
+        const ang = strokeAng + (rng() - 0.5) * 0.4;
+        sctx.strokeStyle = threadColors[Math.floor(rng() * threadColors.length)];
+        sctx.globalAlpha = 0.35 + rng() * 0.4;
+        sctx.lineWidth = Math.max(0.6, W * 0.0012);
+        sctx.beginPath();
+        sctx.moveTo(x, y);
+        sctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+        sctx.stroke();
+      }
+    }
+    sctx.restore();
+    ctx.drawImage(stitch, 0, 0);
+
+    // 打籽绣点缀：法国结，散落在纹样中增加立体颗粒感
+    ctx.save();
+    for (let i = 0; i < 200; i++) {
+      const x = rng() * W;
+      const y = rng() * W;
+      if (mask[Math.floor(y) * W + Math.floor(x)] < 0.7) continue;
+      const r = W * (0.002 + rng() * 0.003);
+      const col = threadColors[Math.floor(rng() * threadColors.length)];
+      ctx.fillStyle = col;
+      ctx.globalAlpha = 0.7 + rng() * 0.25;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // 结的高光
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 套针边缘：在轮廓处用深浅交替的短针收边
+    ctx.save();
+    ctx.strokeStyle = threadColors[2];
+    ctx.lineWidth = Math.max(0.8, W * 0.0016);
+    for (let y = 1; y < W - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        if (edge[y * W + x] < 0.5) continue;
+        ctx.globalAlpha = 0.5 + rng() * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        const a = rng() * Math.PI * 2;
+        ctx.lineTo(x + Math.cos(a) * W * 0.01, y + Math.sin(a) * W * 0.01);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    // 丝线光泽：在整个绣面叠一层微妙的高光方向
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.globalCompositeOperation = "overlay";
+    const sheen = ctx.createLinearGradient(0, 0, W, W);
+    sheen.addColorStop(0, "rgba(255,255,255,0.5)");
+    sheen.addColorStop(0.5, "rgba(255,255,255,0)");
+    sheen.addColorStop(1, "rgba(255,255,255,0.3)");
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, 0, W, W);
+    ctx.restore();
+
+    // 边框：细双线 + 四角打籽花
+    const m = W * 0.042;
+    ctx.save();
+    ctx.strokeStyle = threadColors[2];
+    ctx.lineWidth = Math.max(1.4, W * 0.0028);
+    ctx.strokeRect(m, m, W - m * 2, W - m * 2);
+    ctx.strokeStyle = "rgba(140,42,56,0.4)";
+    ctx.lineWidth = Math.max(0.6, W * 0.0012);
+    ctx.strokeRect(m * 1.12, m * 1.12, W - m * 2.24, W - m * 2.24);
+    ctx.restore();
+
+    // 四角打籽花
+    [[m * 2, m * 2], [W - m * 2, m * 2], [m * 2, W - m * 2], [W - m * 2, W - m * 2]].forEach(([x, y]) => {
+      flower(ctx, x, y, W * 0.018, threadColors[0], 0.9);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.fillStyle = threadColors[1];
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * W * 0.02, y + Math.sin(a) * W * 0.02, W * 0.004, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, threadColors[2], "#E8DCC8");
+  }
+
   /* ---------------- AI 二创合成 ---------------- */
 
   /** 把用户笔迹重染成单一颜色，作为 AI 二创稿上的「原笔迹叠层」 */
@@ -1281,6 +1537,7 @@
       return;
     }
 
+    if (style === "bamboo") {
     // 竹编：四边竹篾交替
     ctx.save();
     const slats = 26;
@@ -1304,7 +1561,47 @@
     ctx.strokeRect(W * 0.022, W * 0.022, W * 0.956, W * 0.956);
     ctx.restore();
     sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, bamboo, "#F0E2C4");
+    return;
   }
+
+  if (style === "shadow") {
+    // 皮影：暖黄羊皮边框 + 镂雕关节线 + 四角云纹
+    ctx.save();
+    ctx.fillStyle = "#E8C88A";
+    ctx.fillRect(0, 0, W, inset * 0.82);
+    ctx.fillRect(0, W - inset * 0.82, W, inset * 0.82);
+    ctx.fillRect(0, 0, inset * 0.82, W);
+    ctx.fillRect(W - inset * 0.82, 0, inset * 0.82, W);
+    ctx.strokeStyle = "#7A2E1E";
+    ctx.lineWidth = Math.max(2, W * 0.0038);
+    ctx.strokeRect(W * 0.026, W * 0.026, W * 0.948, W * 0.948);
+    ctx.strokeStyle = "rgba(122,46,30,0.4)";
+    ctx.lineWidth = Math.max(0.8, W * 0.0012);
+    ctx.strokeRect(W * 0.036, W * 0.036, W * 0.928, W * 0.928);
+    [[0.06, 0.06], [0.94, 0.06], [0.06, 0.94], [0.94, 0.94]].forEach(([p, q]) =>
+      cloudMotif(ctx, W * p, W * q, W * 0.018, "#7A2E1E", 0.85));
+    ctx.restore();
+    sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, "#7A2E1E", "#F2E0B8");
+    return;
+  }
+
+  if (style === "embroidery") {
+    // 刺绣：细双线边框 + 四角打籽花
+    ctx.save();
+    ctx.strokeStyle = "#8C2A38";
+    ctx.lineWidth = Math.max(1.6, W * 0.003);
+    ctx.strokeRect(W * 0.024, W * 0.024, W * 0.952, W * 0.952);
+    ctx.strokeStyle = "rgba(140,42,56,0.35)";
+    ctx.lineWidth = Math.max(0.6, W * 0.0012);
+    ctx.strokeRect(W * 0.034, W * 0.034, W * 0.932, W * 0.932);
+    [[0.06, 0.06], [0.94, 0.06], [0.06, 0.94], [0.94, 0.94]].forEach(([p, q]) => {
+      flower(ctx, W * p, W * q, W * 0.016, "#B23A48", 0.9);
+    });
+    ctx.restore();
+    sealStamp(ctx, W, W * 0.885, W * 0.885, W * 0.05, "#8C2A38", "#E8DCC8");
+    return;
+  }
+}
 
   /**
    * 把 AI 重绘底图与用户原笔迹合成一张非遗作品
@@ -1394,10 +1691,51 @@
     else if (style === "tiedye") drawTiedye(ctx, W, maskData, rng);
     else if (style === "calico") drawCalico(ctx, W, maskData, rng);
     else if (style === "bamboo") drawBamboo(ctx, W, maskData, rng);
+    else if (style === "shadow") drawShadow(ctx, W, maskData, rng);
+    else if (style === "embroidery") drawEmbroidery(ctx, W, maskData, rng);
     else drawPapercut(ctx, W, maskData, rng);
 
     return out;
   }
 
-  window.XHFYCraft = { render, renderAI, META };
+  /** 智能匹配工艺：根据画面线条特征自动选择最契合的非遗门类 */
+  function autoMatchCraft(analysis) {
+    const s = (analysis && analysis.scores) || {};
+    const m = (analysis && analysis.metrics) || {};
+    const htp = (analysis && analysis.htp) || {};
+    const orientEntropy = m.orientationEntropy || 0.5;
+    const bboxRatio = m.bboxRatio || 0.2;
+    const coverage = m.coverage || 0.1;
+    const hueEntropy = m.hueEntropy || 0.5;
+    const tension = s.tension || 50;
+    const order = s.order || 50;
+    const lineDir = htp.lineDirection || "方向多变";
+
+    // 极简单线条（儿童涂鸦）：剪纸，用繁复镂空丰富它
+    if (bboxRatio < 0.12 && coverage < 0.06 && orientEntropy > 0.6) {
+      return "papercut";
+    }
+    // 乱线团（高覆盖、高方向熵、低秩序）：扎染，用蓝色晕染化解
+    if (coverage > 0.22 && orientEntropy > 0.7 && order < 45) {
+      return "tiedye";
+    }
+    // 直线交接（水平/垂直为主、秩序高）：竹编，经纬交织
+    if ((lineDir.indexOf("水平") >= 0 || lineDir.indexOf("垂直") >= 0) && order > 55) {
+      return "bamboo";
+    }
+    // 圆润交织（方向多变但覆盖适中）：刺绣，丝理针脚
+    if (orientEntropy > 0.55 && coverage > 0.08 && coverage < 0.2 && tension < 60) {
+      return "embroidery";
+    }
+    // 曲折有张力（高张力、低覆盖）：皮影，镂雕关节
+    if (tension > 60 && coverage < 0.15) {
+      return "shadow";
+    }
+    // 其余：按秩序感与色调数兜底
+    if (order > 60) return "bamboo";
+    if (hueEntropy > 0.6) return "embroidery";
+    return "papercut";
+  }
+
+  window.XHFYCraft = { render, renderAI, META, autoMatchCraft };
 })();

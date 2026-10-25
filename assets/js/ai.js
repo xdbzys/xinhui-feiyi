@@ -330,7 +330,9 @@
     papercut: "中国非物质文化遗产剪纸艺术，纯正红纸镂空剪影，传统锯齿纹、云纹、团花与角花收边，平面装饰艺术，宣纸质感，米白或纯白背景，构图对称而留呼吸，刀路清晰，无文字",
     tiedye: "中国非物质文化遗产扎染艺术，靛蓝染布，同心晕圈与自然冰裂纹，手工扎结形成的防染留白，布料纤维肌理可见，平面俯拍，构图不对称，无文字",
     calico: "中国非物质文化遗产蓝印花布艺术，靛蓝底白色纹样，传统刻版防染，细密冰裂纹，白花完整清晰，平面装饰艺术，棉布肌理，无文字",
-    bamboo: "中国非物质文化遗产竹编艺术，竹篾经纬交织，一压一挑的编织肌理，暖竹色与深浅竹篾交错，收边整齐，平面装饰艺术，无文字"
+    bamboo: "中国非物质文化遗产竹编艺术，竹篾经纬交织，一压一挑的编织肌理，暖竹色与深浅竹篾交错，收边整齐，平面装饰艺术，无文字",
+    shadow: "中国非物质文化遗产皮影艺术，镂雕牛皮剪影，暖黄羊皮纸透光质感，关节处留细线连接，云纹与月牙纹镂空透影，深褐偏红剪影在暖光中半透明，平面装饰艺术，无文字",
+    embroidery: "中国非物质文化遗产刺绣艺术，绸缎底面上的丝线针脚，缎绣铺满、打籽点缀、套针收边，丝线有光泽与方向感，多层次绣线配色，平面装饰艺术，无文字"
   };
 
   // 各工艺对应的传统纹样元素库（本地取，不调用 LLM）
@@ -338,15 +340,51 @@
     papercut: ["团花", "云纹", "如意纹", "回纹", "缠枝纹", "双喜纹", "角花"],
     tiedye: ["同心圆", "冰裂纹", "放射纹", "扎结留白", "漩涡晕圈", "折痕"],
     calico: ["缠枝花卉", "冰裂纹", "圆点花孔", "回纹边饰", "团花", "草叶纹"],
-    bamboo: ["竹节纹", "经纬格", "人字纹", "回纹收边", "十字编", "六角编"]
+    bamboo: ["竹节纹", "经纬格", "人字纹", "回纹收边", "十字编", "六角编"],
+    shadow: ["云纹镂空", "月牙纹透影", "关节线", "如意纹", "缠枝镂雕", "水纹"],
+    embroidery: ["打籽", "缎绣", "套针", "滚针", "盘金", "丝理"]
   };
 
   /**
+   * 根据画面线条特征联想一个具象意象（不调用 LLM）
+   * 这是「意象具象化」的关键：把抽象线框转化为有生命力的事物
+   */
+  function suggestImagery(analysis) {
+    const v = (analysis && analysis.vision) || {};
+    const s = (analysis && analysis.scores) || {};
+    const m = (analysis && analysis.metrics) || {};
+    const layout = (v.layout || "").toLowerCase();
+    const htp = (analysis && analysis.htp) || {};
+    const lineDir = htp.lineDirection || "方向多变";
+
+    // 根据布局关键词匹配具象意象
+    if (/圆|圈|环|球/.test(layout)) return "一只展翅的飞鸟";
+    if (/三角|尖|山/.test(layout)) return "一座层叠的远山";
+    if (/交叉|十字|交/.test(layout)) return "一株舒展的植物";
+    if (/方|框|格/.test(layout)) return "一扇传统花窗";
+    if (/波|曲|弧|弯/.test(layout)) return "一条游动的锦鲤";
+    if (/散|点|碎/.test(layout)) return "一树飘落的花瓣";
+    if (/螺旋|涡|旋/.test(layout)) return "一团翻腾的云气";
+
+    // 根据线条方向兜底
+    if (lineDir.indexOf("斜") >= 0) return "一只起舞的人影";
+    if (lineDir.indexOf("水平") >= 0) return "一叶扁舟与水面";
+    if (lineDir.indexOf("垂直") >= 0) return "一棵挺立的树木";
+
+    // 根据画面气质兜底
+    if ((s.tension || 0) > 60) return "一只瑞兽的剪影";
+    if ((s.vitality || 0) > 60) return "一丛盛放的花卉";
+    if ((s.order || 0) > 60) return "一组对称的吉祥纹样";
+    return "一片写意的山水云纹";
+  }
+
+  /**
    * 本地构建二创蓝图（不调用 LLM，省掉一次完整请求）。
-   * 这里的图像模型只负责生成「一张满版的非遗纹样底纹」；
-   * 构图不交给模型猜（它会画跑偏），而是由前端以用户真实笔迹为骨架，
-   * 套上该工艺的造型语言（剪影、镂空、团花、冰裂纹、经纬），
-   * 这样成品既是真正的工艺作品，又与原画的构图、位置、留白一致。
+   * 核心思路：
+   * 1. 意象具象化：根据画面结构联想一个具象事物（飞鸟/山水/人物…），
+   *    让 AI 把抽象线框转化为有生命的形象，但保留原草图的骨架走向；
+   * 2. 工艺语言：按所选非遗门类生成对应材质与纹样；
+   * 3. 手工肌理：强约束必须有真实材质纹理，拒绝廉价特效。
    */
   function craftBlueprint(analysis, report, style) {
     const meta = (window.XHFYCraft && window.XHFYCraft.META[style]) || { short: style, name: style, palette: ["#A63A2B"] };
@@ -355,8 +393,7 @@
       .map((c) => c.name).filter((n) => n && n !== "墨色");
     const motifs = (CRAFT_MOTIFS[style] || CRAFT_MOTIFS.papercut);
 
-    // 纹样方案由画面自身的结构决定，而不是套模板：
-    // 秩序感高 → 团花（辐辏对称）；张力高 → 锯齿纹收边；活力高 → 朵花纹镂空。
+    // 纹样方案由画面自身的结构决定
     const sc = (analysis && analysis.scores) || {};
     const plan = {
       frame: (sc.order || 0) >= 52 ? "团花" : "角花",
@@ -365,13 +402,20 @@
       accent: (analysis.dominantColors && analysis.dominantColors[0] && analysis.dominantColors[0].hex) || "#A63A2B"
     };
 
+    // 意象具象化：从抽象线框联想到的具象事物
+    const imagery = suggestImagery(analysis);
+    const layout = (analysis.vision && analysis.vision.layout) || "自由构图";
+
     const prompt = [
-      "生成一张四边出血、铺满整个画布的非遗" + meta.short + "纹样材质图，供后续裁切使用。",
-      "纹样语法：" + motifs.join("、") + "，细密连续、层次丰富，花纹延伸到画面四边。",
-      "以" + plan.edge + "收边，内部" + plan.inner + "镂空，整体" + plan.frame + "式布局。",
-      palette.length ? "整体色调参考" + palette.join("、") + "的冷暖倾向。" : "",
-      "不要中心主体，不要边框，不要白色留边，不要文字，不要署名，不要水印。",
-      "平面装饰艺术，正视角俯拍，材质肌理清晰，正方形构图。"
+      "这是一件中国非遗" + meta.short + "艺术展品，不是简单的纹样填充。",
+      "请将画面中抽象的线条骨架，联想并转化为「" + imagery + "」的具象形象，",
+      "但必须严格保留原草图的核心骨架走向与构图比例（原布局：" + layout + "）。",
+      "纹样语法：" + motifs.join("、") + "，用这些传统纹样去丰富具象形象的内部与边缘。",
+      "以" + plan.edge + "收边，内部" + plan.inner + "装饰，整体" + plan.frame + "式布局。",
+      palette.length ? "整体色调参考" + palette.join("、") + "的冷暖倾向，色彩和谐深邃。" : "",
+      "【材质要求】必须有非遗手工制作的真实肌理：" + craftTexture(style) + "。",
+      "【审美要求】东方美学高级感，背景留白有呼吸感，光影柔和，整体像一件博物馆展品。",
+      "【禁止】绝对不要直接在原线条上填充网格、纯色块或廉价电脑特效；不要文字、不要署名、不要水印、不要边框。"
     ].filter(Boolean).join("");
 
     return {
@@ -379,19 +423,38 @@
       motifs,
       palette,
       plan,
+      imagery,
+      layout,
       prompt,
       style
     };
   }
 
-  /** 按蓝图调用图像模型，生成非遗纹样底纹 */
+  /** 各工艺的真实材质肌理描述（用于提示词强约束） */
+  function craftTexture(style) {
+    const map = {
+      papercut: "宣纸的纤维纹理、红纸的厚实与刀口的利落、镂空处透出的纸背阴影",
+      tiedye: "棉布的织纹、靛蓝染液的深浅晕染层次、扎结处的自然折痕与冰裂纹",
+      calico: "棉布的经纬织纹、石灰防染的粗糙边缘、靛蓝底色的深浅不均",
+      bamboo: "竹篾的纵向纤维、竹节的环状节疤、编织交错的凹凸阴影、竹片的自然色差",
+      shadow: "牛皮纸的半透明纤维、镂雕边缘的焦痕、暖光透过镂空的橘黄光晕、关节线的细线连接",
+      embroidery: "绸缎的经向光泽、丝线的反光与毛茸、针脚的排列方向、打籽的立体颗粒感"
+    };
+    return map[style] || map.papercut;
+  }
+
+  /** 按蓝图调用图像模型，生成非遗二创底图 */
   async function craftRedraw(style, blueprint, analysis, report) {
     const bp = blueprint || {};
     const styleText = STYLE_PROMPTS[style] || STYLE_PROMPTS.papercut;
+    const imagery = bp.imagery || "一片写意山水";
     const prompt = [
       styleText,
       bp.prompt || "",
-      "满版连续纹样，四边出血，无中心主体，无文字，无边框，无水印，正方形。"
+      "主体是「" + imagery + "」，位于画面中心偏左或偏右，不要完全居中对称；周围保留大面积呼吸留白。",
+      "画面有明确的具象形象，但形象的轮廓走向要呼应草图骨架。",
+      "材质肌理必须真实可辨，有手工温度，光影柔和自然。",
+      "正方形构图，无文字、无水印、无外框。"
     ].filter(Boolean).join("。");
 
     const data = await call("/images/generations", {
