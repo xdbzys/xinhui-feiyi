@@ -344,7 +344,7 @@
   function normalizeReport(ai, fallback) {
     const out = Object.assign({}, fallback, ai || {});
     const strKeys = ["title", "archetype", "summary", "colors", "lines", "space", "strength", "whisper", "process", "mood",
-      "alternative", "confidence"];
+      "alternative", "confidence", "limitations"];
     strKeys.forEach((k) => {
       if (!out[k] || typeof out[k] !== "string") out[k] = fallback[k];
     });
@@ -354,6 +354,22 @@
     out.evidence = (Array.isArray(ev) && ev.length)
       ? ev.filter((x) => typeof x === "string" && x.trim()).slice(0, 6)
       : fallback.evidence;
+
+    // FEATS 逐维阅读：维度与分数沿用本地实测，AI 只补「分数对应的证据说明」，
+    // 这样维度名与分值不会被编造，同时保留 AI 的解读
+    const localFeats = (fallback.feats || []);
+    const aiFeats = (ai && Array.isArray(ai.feats)) ? ai.feats : [];
+    out.feats = localFeats.map((f) => {
+      const hit = aiFeats.find((x) => x && x.dim === f.dim && typeof x.note === "string");
+      // AI 的解读在前，本地原始读数在后：可复核的数字不能被改写掉
+      const note = (hit && hit.note ? hit.note + " ｜ " : "") + (f.note || "");
+      return { dim: f.dim, score: f.score, note };
+    });
+
+    const ac = ai && ai.contradictions;
+    out.contradictions = (Array.isArray(ac) && ac.length)
+      ? ac.filter((x) => typeof x === "string" && x.trim()).slice(0, 3)
+      : (fallback.contradictions || []);
 
     // 心象处方：AI 只从知识库 ID 中选，具体步骤始终由本地知识库给出
     const localRegs = (fallback.regulations || []).slice();
@@ -584,6 +600,23 @@
     }
     const cfEl = $("#reportConfidence");
     if (cfEl) cfEl.textContent = r.confidence ? "把握度：" + r.confidence : "";
+
+    // 形式元素读数（FEATS）与解读边界
+    const featsEl = $("#reportFeats");
+    if (featsEl) {
+      featsEl.innerHTML = (r.feats || []).map((f) =>
+        "<li><b>" + escapeHTML(f.dim || "") + "</b><i>" + f.score + "/5</i><em>" +
+        escapeHTML(f.note || "") + "</em></li>").join("");
+    }
+    const caveatEl = $("#reportCaveat");
+    if (caveatEl) {
+      const cs = r.contradictions || [];
+      caveatEl.innerHTML =
+        (cs.length ? "<b>内部矛盾与权重</b>" + cs.map((t) => "<p>" + escapeHTML(t) + "</p>").join("") : "") +
+        (r.limitations ? "<b>本次局限</b><p>" + escapeHTML(r.limitations) + "</p>" : "");
+      caveatEl.hidden = !caveatEl.innerHTML;
+    }
+
     const altEl = $("#reportAlternative");
     if (altEl) altEl.textContent = r.alternative || "";
   }
@@ -654,29 +687,166 @@
     applyMockup(url || "");
   }
 
-  /* ---- AI 材质 + 真实笔迹裁切 ---- */
+  /* ---- 工艺造型：以真实笔迹为骨架，生成各工艺的造型语言 ---- */
 
   const COMPOSE_SIZE = 1024;
 
+  function mkCanvas(size) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    return c;
+  }
+
   /**
-   * 用用户真实笔迹生成裁切蒙版。
-   * 留边映射与 PaintStudio.compositeSquare 一致（8% 留边），
-   * 再沿八个方向偏移绘制一次，把细线膨胀成有宽度的纹样带。
+   * 笔迹映射到正方形画布。留边与 PaintStudio.compositeSquare 一致（8% 留边），
+   * 保证成品构图、主体位置与留白与原画完全对应。
    */
-  function strokeMaskCanvas(size) {
+  function inkLayer(size) {
     const s = size || COMPOSE_SIZE;
     const pad = s * 0.08;
     const inner = s - pad * 2;
     const trace = studio.traceCanvas(s);
     const h = (inner / studio.canvas.width) * studio.canvas.height;
     const y = (s - h) / 2;
-    const mask = document.createElement("canvas");
-    mask.width = s;
-    mask.height = s;
+    const cv = mkCanvas(s);
+    cv.getContext("2d").drawImage(trace, pad, y, inner, h);
+    return cv;
+  }
+
+  /**
+   * 沿轮廓做「扇贝式」膨胀：按角度交替取半径，一次成形。
+   * 这一步把细线变成有宽度的手工纸带，并在边缘留下近似锯齿纹/月牙边的起伏，
+   * 而不是把线原样加粗——这是与「笔迹贴图」最大的区别。
+   */
+  function scallopDilate(ctx, src, base) {
+    const steps = 60;
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const r = i % 2 ? base * 0.40 : base;
+      ctx.drawImage(src, Math.cos(a) * r, Math.sin(a) * r);
+    }
+  }
+
+  /** 预先渲染的镂空单元：月牙纹、朵花纹、圆点纹 */
+  const HOLE_SPRITES = {};
+  function holeSprite(kind, r) {
+    const key = kind + "|" + Math.round(r);
+    if (HOLE_SPRITES[key]) return HOLE_SPRITES[key];
+    const s = Math.ceil(r * 4);
+    const c = mkCanvas(s);
+    const x = c.getContext("2d");
+    x.fillStyle = "#fff";
+    if (kind === "crescent") {
+      x.beginPath();
+      x.arc(s / 2, s / 2, r, 0, Math.PI * 2);
+      x.fill();
+      x.globalCompositeOperation = "destination-out";
+      x.beginPath();
+      x.arc(s / 2 + r * 0.68, s / 2, r * 0.95, 0, Math.PI * 2);
+      x.fill();
+    } else if (kind === "petal") {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        x.beginPath();
+        x.ellipse(s / 2 + Math.cos(a) * r * 0.42, s / 2 + Math.sin(a) * r * 0.42, r * 0.40, r * 0.20, a, 0, Math.PI * 2);
+        x.fill();
+      }
+    } else {
+      x.beginPath();
+      x.arc(s / 2, s / 2, r, 0, Math.PI * 2);
+      x.fill();
+    }
+    HOLE_SPRITES[key] = c;
+    return c;
+  }
+
+  /** 在剪影内部按纹理格律镂空——剪纸的本质是「镂空」而非填色 */
+  function carveHoles(ctx, s, spacing, style) {
+    const data = ctx.getImageData(0, 0, s, s).data;
+    const r = s * (style === "calico" ? 0.010 : 0.0115);
+    const kinds = style === "calico" ? ["petal", "dot", "petal"] : ["crescent", "crescent", "dot"];
+    let n = 0;
+    for (let y = spacing * 0.55; y < s; y += spacing) {
+      for (let x = spacing * 0.55; x < s; x += spacing) {
+        const jx = x + (n % 2 ? spacing * 0.3 : 0);
+        const jy = y + (n % 3 === 0 ? spacing * 0.16 : 0);
+        if (jx < 1 || jy < 1 || jx >= s - 1 || jy >= s - 1) continue;
+        if (data[(Math.floor(jy) * s + Math.floor(jx)) * 4 + 3] < 210) continue;
+        const sp = holeSprite(kinds[n % kinds.length], r);
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.drawImage(sp, jx - sp.width / 2, jy - sp.height / 2);
+        n++;
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  /** 冰裂纹 / 经纬编织的空隙：细线镂空，模拟防染裂纹与竹篾间隙 */
+  function carveLines(ctx, s, style) {
+    ctx.globalCompositeOperation = "destination-out";
+    if (style === "tiedye") {
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.lineWidth = Math.max(1, s * 0.0022);
+      for (let i = 0; i < 46; i++) {
+        const a = (i / 46) * Math.PI * 2;
+        const r0 = s * (0.06 + (i % 7) * 0.012);
+        ctx.beginPath();
+        ctx.moveTo(s / 2 + Math.cos(a) * r0, s / 2 + Math.sin(a) * r0);
+        for (let t = r0; t < s * 0.62; t += s * 0.03) {
+          const jitter = Math.sin(t * 0.09 + i) * s * 0.012;
+          ctx.lineTo(s / 2 + Math.cos(a + jitter / s) * t, s / 2 + Math.sin(a + jitter / s) * t);
+        }
+        ctx.stroke();
+      }
+    } else if (style === "bamboo") {
+      ctx.strokeStyle = "rgba(0,0,0,0.8)";
+      ctx.lineWidth = Math.max(1, s * 0.003);
+      const gap = s * 0.028;
+      for (let i = -s; i < s * 2; i += gap) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i + s, s);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(i, s);
+        ctx.lineTo(i + s, 0);
+        ctx.stroke();
+      }
+    } else if (style === "calico") {
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineWidth = Math.max(1, s * 0.0018);
+      for (let i = 0; i < 60; i++) {
+        const x = Math.random() * s;
+        const y = Math.random() * s;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() - 0.5) * s * 0.09, y + (Math.random() - 0.5) * s * 0.09);
+        ctx.stroke();
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  /** 各工艺的造型蒙版：形状来自笔迹，语言来自工艺 */
+  function craftMaskCanvas(size, style) {
+    const s = size || COMPOSE_SIZE;
+    const ink = inkLayer(s);
+    const mask = mkCanvas(s);
     const ctx = mask.getContext("2d");
-    const d = Math.max(6, s * 0.008);
-    const dirs = [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]];
-    dirs.forEach(([dx, dy]) => ctx.drawImage(trace, pad + dx, y + dy, inner, h));
+    const st = style || "papercut";
+    if (st === "tiedye") {
+      ctx.filter = "blur(" + Math.round(s * 0.007) + "px)";
+      scallopDilate(ctx, ink, s * 0.010);
+      ctx.filter = "none";
+      carveLines(ctx, s, "tiedye");
+    } else if (st === "bamboo") {
+      scallopDilate(ctx, ink, s * 0.014);
+      carveLines(ctx, s, "bamboo");
+    } else {
+      scallopDilate(ctx, ink, s * 0.017);
+      carveHoles(ctx, s, s * 0.055, st);
+      if (st === "calico") carveLines(ctx, s, "calico");
+    }
     return mask;
   }
 
@@ -689,29 +859,126 @@
     });
   }
 
-  /** 把满版纹样材质按笔迹形状裁切；返回透明底 PNG dataURL */
-  async function composeAiPattern(textureURL) {
-    const dataURL = await window.XHFYAI.imageToDataURL(textureURL);
-    const tex = await loadImage(dataURL);
+  /** 各工艺的「纸色」：剪纸取用户自己的暖色主色，其余按工艺固有色 */
+  function paperColor(style, analysis) {
+    if (style === "tiedye" || style === "calico") return "#22456B";
+    if (style === "bamboo") return "#8A6A3B";
+    const dc = (analysis && analysis.dominantColors) || [];
+    const warm = dc.find((c) => /红|橙|朱|赭|黄|暖|绯|丹|落日/.test(c.name || ""));
+    return (warm && warm.hex) || "#A63A2B";
+  }
+
+  /**
+   * 由画面结构派生的纹样层：收边框、团花、角花，全部是实心纸型并带镂空。
+   * 位置与尺度取自画面的重心与包围盒，所以与用户的画对得上；
+   * 但它是「纸」而不是「描线」——这正是上一版被指太草率的根因。
+   */
+  function ornamentCanvas(s, style, plan) {
+    const a = state.analysis || {};
+    const m = a.metrics || {};
+    const p = plan || {};
+    const paper = paperColor(style, a);
+    const cx = Math.min(0.82, Math.max(0.18, (m.centroid && m.centroid.x) || 0.5)) * s;
+    const cy = Math.min(0.82, Math.max(0.18, (m.centroid && m.centroid.y) || 0.5)) * s;
+    const R = s * (0.15 + Math.min(0.15, (m.bboxRatio || 0.2) * 0.5));
+
+    const o = mkCanvas(s);
+    const c = o.getContext("2d");
+    c.fillStyle = paper;
+    c.globalAlpha = style === "tiedye" ? 0.78 : 1;
+
+    // ---- 收边框：一圈有一定宽度的纸边，剪纸上最常见的「拐子纹」位置 ----
+    const a0 = s * 0.030;
+    const band = s * 0.046;
+    c.fillRect(a0, a0, s - a0 * 2, s - a0 * 2);
+    c.globalCompositeOperation = "destination-out";
+    const inner = a0 + band;
+    c.fillRect(inner, inner, s - inner * 2, s - inner * 2);
+    c.globalCompositeOperation = "source-over";
+
+    // ---- 团花：花瓣辐辏式环列，中心一枚花心 ----
+    const petals = p.frame === "团花" ? 12 : 8;
+    for (let i = 0; i < petals; i++) {
+      const ang = (i / petals) * Math.PI * 2;
+      c.beginPath();
+      c.ellipse(
+        cx + Math.cos(ang) * R * 0.88,
+        cy + Math.sin(ang) * R * 0.88,
+        R * 0.30, R * 0.15, ang, 0, Math.PI * 2
+      );
+      c.fill();
+    }
+    c.beginPath();
+    c.arc(cx, cy, R * 0.40, 0, Math.PI * 2);
+    c.fill();
+
+    // ---- 角花：四角各一枚四瓣小花，收住画面角落 ----
+    const cr = s * 0.040;
+    const cIn = inner + s * 0.055;
+    [[cIn, cIn], [s - cIn, cIn], [cIn, s - cIn], [s - cIn, s - cIn]].forEach(([ox, oy]) => {
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        c.beginPath();
+        c.ellipse(ox + Math.cos(ang) * cr * 0.55, oy + Math.sin(ang) * cr * 0.55, cr * 0.40, cr * 0.20, ang, 0, Math.PI * 2);
+        c.fill();
+      }
+    });
+
+    // ---- 镂空：边框内的菱形点纹、花瓣心孔、花心孔 ----
+    c.globalCompositeOperation = "destination-out";
+    const mid = a0 + band / 2;
+    const step = s * 0.075;
+    const dsz = s * 0.011;
+    const diamond = (x, y) => {
+      c.beginPath();
+      c.moveTo(x, y - dsz); c.lineTo(x + dsz, y);
+      c.lineTo(x, y + dsz); c.lineTo(x - dsz, y);
+      c.closePath(); c.fill();
+    };
+    for (let t = inner + step / 2; t < s - inner; t += step) {
+      diamond(t, mid);
+      diamond(mid, t);
+      diamond(t, s - mid);
+      diamond(s - mid, t);
+    }
+    for (let i = 0; i < petals; i++) {
+      const ang = (i / petals) * Math.PI * 2;
+      c.beginPath();
+      c.arc(cx + Math.cos(ang) * R * 0.88, cy + Math.sin(ang) * R * 0.88, R * 0.085, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.beginPath();
+    c.arc(cx, cy, R * 0.12, 0, Math.PI * 2);
+    c.fill();
+    c.globalCompositeOperation = "source-over";
+
+    return o;
+  }
+
+  /** 工艺材质 ∩ 造型蒙版，再叠纸型装饰层；返回透明底 PNG */
+  async function composeCraftArt(textureURL, style, plan) {
+    const tex = await loadImage(await window.XHFYAI.imageToDataURL(textureURL));
     const s = COMPOSE_SIZE;
-    const side = Math.min(tex.width, tex.height);
-    // 取中心 82%，避开模型常见的边缘留白与右下角角标
-    const crop = side * 0.82;
-    const sx = (tex.width - crop) / 2;
-    const sy = (tex.height - crop) / 2;
-    const out = document.createElement("canvas");
-    out.width = s;
-    out.height = s;
+    const out = mkCanvas(s);
     const ctx = out.getContext("2d");
-    ctx.drawImage(tex, sx, sy, crop, crop, 0, 0, s, s);
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.drawImage(strokeMaskCanvas(s), 0, 0);
+
+    ctx.drawImage(ornamentCanvas(s, style, plan), 0, 0);
+
+    const fill = mkCanvas(s);
+    const fctx = fill.getContext("2d");
+    const side = Math.min(tex.width, tex.height);
+    const crop = side * 0.82;  // 避开模型常见的边缘留白与右下角角标
+    fctx.drawImage(tex, (tex.width - crop) / 2, (tex.height - crop) / 2, crop, crop, 0, 0, s, s);
+    fctx.globalCompositeOperation = "destination-in";
+    fctx.drawImage(craftMaskCanvas(s, style), 0, 0);
+
+    ctx.drawImage(fill, 0, 0);
     return out.toDataURL("image/png");
   }
 
-  /** 无法把底图读进 canvas 时，用 CSS 蒙版达到同样的裁切效果（不可下载合成图） */
-  function applyCssMask(img) {
-    const maskURL = strokeMaskCanvas(COMPOSE_SIZE).toDataURL("image/png");
+  /** 无法把底图读进 canvas 时，用 CSS 蒙版给出同样的造型轮廓（不可下载合成图） */
+  function applyCssMask(img, style) {
+    const maskURL = craftMaskCanvas(COMPOSE_SIZE, style || state.craftStyle).toDataURL("image/png");
     img.style.webkitMaskImage = "url(" + maskURL + ")";
     img.style.maskImage = "url(" + maskURL + ")";
     img.style.webkitMaskSize = "100% 100%";
@@ -781,11 +1048,11 @@
       loaderText.textContent = "AI 正在生成" + meta.short + "纹样材质…";
       const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report);
 
-      // 构图不交给模型：用用户真实笔迹做裁切蒙版
-      loaderText.textContent = "正在按你的笔迹裁切" + meta.short + "纹样…";
+      // 构图不交给模型：用真实笔迹做骨架，再套上该工艺的造型语言
+      loaderText.textContent = "正在按你的笔迹生成" + meta.short + "造型…";
       let composed = "";
       try {
-        composed = await composeAiPattern(url);
+        composed = await composeCraftArt(url, style, bp.plan);
       } catch (e) {
         composed = "";
       }
@@ -798,7 +1065,7 @@
       img.src = state.aiImageURL;
       img.alt = "AI 二创 · " + meta.short;
       if (composed) clearCssMask(img);
-      else applyCssMask(img);
+      else applyCssMask(img, style);
       applyAiPattern(state.aiImageURL);
 
       $("#aiArtTitle").textContent = "AI 二创 · " + meta.short + (bp.title ? " · " + bp.title : "");
@@ -814,7 +1081,7 @@
         dl.rel = "noopener";
       }
       toast(composed
-        ? "AI 二创完成：纹样材质已按你的笔迹裁切"
+        ? "AI 二创完成：笔迹已转成" + meta.short + "造型"
         : "AI 二创完成：纹样材质已按你的笔迹显示（无法导出合成图）", 4200);
     } catch (e) {
       toast("AI 二创失败：" + e.message, 4800);

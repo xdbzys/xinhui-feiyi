@@ -156,6 +156,9 @@
       "HTP 特征：" + [htp.lineDirection, htp.pressure, htp.repeated ? "反复涂抹" : "",
         htp.horizBias, htp.vertBias, htp.sizeBias, htp.cutoff, a.placement].filter(Boolean).join(" · "),
       "包围盒占画面：" + Math.round((m.bboxRatio || 0) * 100) + "%（《中学生绘画心理应用手册》：>67% 过大、<11% 过小）",
+      "FEATS 形式元素（0–5，空=不适用）：" + (a.feats || [])
+        .map((f) => f.dim + (f.score === null || f.score === undefined ? "=不适用" : "=" + f.score))
+        .join(" · "),
       "主色：" + a.dominantColors.map((c) => c.name + c.hex).join("、"),
       "笔触：" + a.lineStyle + "；空间：" + a.spaceStyle + "；色彩：" + a.colorStyle
     ].join("\n");
@@ -220,6 +223,8 @@
       "6. 语气克制，用「可能 / 也许 / 更像是」；结论落到自我觉察 + 一个可执行的小行动。",
       "7. 分数只是线索，不是结论：不得把「张力 72」直接翻译成「你很焦虑」，必须同时引用笔触形态、位置、颜色等可视证据，说明为何这样读。",
       "8. 当量化指标与云端视觉观察冲突时，以可复核的视觉观察为准，并在 evidence 中写明这处冲突。",
+      "9. 逐维读 FEATS：对已给分的维度逐一说明「分数 → 画面证据 → 可能含义」；标注「不适用」的维度一律不要评，也不要换说法硬评。",
+      "10. 必须写出至少一处内部矛盾或不确定（如色彩与线条指向相反、某维度证据不足），并写明本次分析的局限。",
       "",
       "【量化视觉分析（本地算法，0–100，已按画面尺度归一化）】",
       describeAnalysis(analysis),
@@ -248,6 +253,9 @@
         colors: "100-140字色彩解读，须引用具体色名、冷暖占比、饱和度、用色数量，末尾必须括号标注《色彩心理学》或《中学生绘画心理应用手册》对应条目",
         lines: "100-140字线条与张力，须引用张力分值、线条方向、笔触力度(HTP)、方向一致性、是否反复涂抹，末尾必须括号标注《中学生绘画心理应用手册》用笔力度或线条条目",
         space: "100-140字空间与留白，须引用覆盖度、包围盒比例(sizeBias)、画面位置、是否切断(cutoff)、留白指数、四区权重，末尾必须括号标注《中学生绘画心理应用手册》画面大小/位置/切断条目",
+        feats: [{ dim: "维度名，只能取自上方 FEATS 中已给分的项", score: "整数0-5", note: "≤30字：该分数对应的具体画面证据与可能含义" }],
+        contradictions: ["1-2条：画面中指向不一致的证据，以及你如何权衡"],
+        limitations: "40-70字：本次分析不能判断什么、为什么不能",
         alternative: "70-110字：对最突出特征给出另一种同样合理的解读，并说明本次为何更倾向主解读",
         confidence: "「较有把握」/「可能」/「难以判断」三选一，后接10字内理由",
         strength: "40-70字：画面中的一处心理资源，须指认具体位置或元素",
@@ -323,8 +331,9 @@
   /**
    * 本地构建二创蓝图（不调用 LLM，省掉一次完整请求）。
    * 这里的图像模型只负责生成「一张满版的非遗纹样底纹」；
-   * 构图不交给模型猜（它会画跑偏），而是由前端用用户真实笔迹做裁切蒙版，
-   * 这样成品的构图、主体位置与留白必然与原画一致。
+   * 构图不交给模型猜（它会画跑偏），而是由前端以用户真实笔迹为骨架，
+   * 套上该工艺的造型语言（剪影、镂空、团花、冰裂纹、经纬），
+   * 这样成品既是真正的工艺作品，又与原画的构图、位置、留白一致。
    */
   function craftBlueprint(analysis, report, style) {
     const meta = (window.XHFYCraft && window.XHFYCraft.META[style]) || { short: style, name: style, palette: ["#A63A2B"] };
@@ -333,9 +342,20 @@
       .map((c) => c.name).filter((n) => n && n !== "墨色");
     const motifs = (CRAFT_MOTIFS[style] || CRAFT_MOTIFS.papercut);
 
+    // 纹样方案由画面自身的结构决定，而不是套模板：
+    // 秩序感高 → 团花（辐辏对称）；张力高 → 锯齿纹收边；活力高 → 朵花纹镂空。
+    const sc = (analysis && analysis.scores) || {};
+    const plan = {
+      frame: (sc.order || 0) >= 52 ? "团花" : "角花",
+      edge: (sc.tension || 0) >= 50 ? "锯齿纹" : "月牙纹",
+      inner: (sc.vitality || 0) >= 55 ? "朵花纹" : "云纹",
+      accent: (analysis.dominantColors && analysis.dominantColors[0] && analysis.dominantColors[0].hex) || "#A63A2B"
+    };
+
     const prompt = [
       "生成一张四边出血、铺满整个画布的非遗" + meta.short + "纹样材质图，供后续裁切使用。",
       "纹样语法：" + motifs.join("、") + "，细密连续、层次丰富，花纹延伸到画面四边。",
+      "以" + plan.edge + "收边，内部" + plan.inner + "镂空，整体" + plan.frame + "式布局。",
       palette.length ? "整体色调参考" + palette.join("、") + "的冷暖倾向。" : "",
       "不要中心主体，不要边框，不要白色留边，不要文字，不要署名，不要水印。",
       "平面装饰艺术，正视角俯拍，材质肌理清晰，正方形构图。"
@@ -345,6 +365,7 @@
       title: (report && (report.archetype || report.title)) || "心象纹样",
       motifs,
       palette,
+      plan,
       prompt,
       style
     };

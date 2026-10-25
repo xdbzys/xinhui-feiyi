@@ -139,6 +139,34 @@
   ];
 
 
+  // ---------- FEATS 形式元素量表（Gantt & Tabone） ----------
+  // 只评可观察的形式元素，0–5 分；具象维度对抽象涂画不适用
+  const featsScales = [
+    { feature: "色彩显著度（Prominence of Color）0–5", meaning: "0＝只有轮廓线、几乎不上色；5＝浓色铺满整幅。衡量色彩占据画面的程度，不评价颜色含义" },
+    { feature: "色彩贴合度（Color Fit）0–5", meaning: "颜色与所画对象现实色的吻合程度。0＝完全不合理（如紫色的树）；5＝高度写实。抽象涂画不适用" },
+    { feature: "隐含能量（Implied Energy）0–5", meaning: "笔触透出的力度与运动感。0＝虚弱无力；5＝强烈、快速、有压迫感" },
+    { feature: "空间使用（Space）0–5", meaning: "画纸被使用的比例与方式。0＝极小一点；5＝填满整张纸" },
+    { feature: "整合度（Integration）0–5", meaning: "各部分是否连成有关系的整体。0＝散乱互不相关；5＝结构完整统一" },
+    { feature: "逻辑性（Logic）0–5", meaning: "画面是否自洽、有可理解的秩序。抽象涂画不适用" },
+    { feature: "写实性（Realism）0–5", meaning: "与真实形象的接近程度。抽象涂画不适用" },
+    { feature: "问题解决（Problem-Solving）0–5", meaning: "是否画出达成目标的可行方式（如人如何摘到苹果）。本测验不适用" },
+    { feature: "发展水平（Developmental Level）0–5", meaning: "造型成熟度，需与年龄常模比对。本地不适用" },
+    { feature: "细节丰富度（Details）0–5", meaning: "对象与环境的细节数量。0＝几乎没有细节；5＝细节密集" },
+    { feature: "线条质量（Line Quality）0–5", meaning: "线条的控制与变化。0＝抖动失控、断续；5＝流畅、有控制也有变化" },
+    { feature: "人物（Person）0–5", meaning: "人物形象完整度与在场感。本测验不适用" },
+    { feature: "旋转之缺失（Rotation absent）1–5", meaning: "5＝画面正立；1＝整体明显倾斜旋转。旋转常与失衡感相关，须结合其他证据" },
+    { feature: "重复之缺失（Perseveration absent）1–5", meaning: "5＝无重复；1＝同一处反复涂擦、同形反复堆叠。常与固着、焦虑性重复有关" }
+  ];
+
+  // ---------- 标准化评估的解读纪律 ----------
+  const assessmentNotes = [
+    "FEATS 只评「看得见的形式」，不评「画里的人是谁」；分数不是诊断，必须结合多处证据",
+    "DDS 研究中空间使用 <33%、颜色 ≤2 种与抑郁群体相关；这是群体统计相关，不能用于个体判断",
+    "任何单一维度都不能定论：色彩、线条、空间、过程行为要交叉验证，并给出替代解释",
+    "「不适用」是合法结论：抽象涂画没有具象对象时，写实性/人物/逻辑性等维度不得强行打分",
+    "研究结论只能作为可能性权重；触及自伤或危机表达时，应引导寻求专业帮助"
+  ];
+
   // ---------- 表达性艺术治疗（EAT）原则 ----------
   const eatPrinciples = [
     "创作过程本身就是调节：不需要画得好看，动手已经在改变情绪状态（Malchiodi）",
@@ -471,6 +499,10 @@
     colorAnalysis.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
     out.push("— 色彩的心理属性（《色彩心理学》淀本孝雄、藤澤英昭）—");
     colorAttributes.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— FEATS 形式元素量表（Gantt & Tabone；只评可观察的形式，0–5 分）—");
+    featsScales.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 标准化评估的解读纪律（必须遵守）—");
+    assessmentNotes.forEach((n) => out.push("· " + n));
     out.push("— 常见画面元素 —");
     elements.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
     out.push("— 空间留白 —");
@@ -492,6 +524,7 @@
     spatial, lines, colors, elements, space, eatPrinciples, craftPrinciples,
     regulations, behaviorRules, boundaries,
     htpOverall, htpLine, colorAnalysis, colorAttributes,
+    featsScales, assessmentNotes,
     recommendRegulation, buildKnowledgeBlock, buildKnowledgeBlockCompact, buildKnowledgeBlockRich
   };
 })();

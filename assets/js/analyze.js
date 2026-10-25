@@ -46,6 +46,53 @@
     return "绯红";
   }
 
+  /**
+   * FEATS 形式元素评分（Formal Elements Art Therapy Scale，Gantt & Tabone）。
+   * 原则：只评「可观察的形式元素」，0–5 分并附可复核证据；
+   * 与具象内容绑定的维度（人物、写实性、问题解决、发展水平、色彩贴合度、逻辑性）
+   * 对抽象涂画不适用，一律标「不适用」，不给分、不推测。
+   */
+  function buildFeats(x) {
+    const g = (v, lo, hi) => Math.max(lo === undefined ? 0 : lo, Math.min(hi === undefined ? 5 : hi, Math.round(v)));
+    const pct = (v) => Math.round((v || 0) * 100) + "%";
+    const list = [];
+    const push = (dim, score, evidence) => list.push({ dim, score, evidence });
+    const NA = (dim, why) => list.push({ dim, score: null, evidence: "不适用：" + why });
+
+    push("色彩显著度", g((x.tint * 0.5 + x.sat * 0.3 + x.coverage * 0.9) * 5),
+      "彩色笔迹 " + pct(x.tint) + "、平均饱和度 " + x.sat.toFixed(2) + "、覆盖 " + pct(x.coverage));
+
+    push("隐含能量", g((x.speed * 0.35 + x.strength * 0.30 + Math.min(x.strokes / 25, 1) * 0.20 + x.coverage * 0.6) * 5),
+      "笔速 " + (x.speed).toFixed(2) + "、笔压强度 " + Math.round(x.rawStrength) + "、" + x.strokes + " 笔");
+
+    push("空间使用", g((x.bbox * 0.7 + x.coverage * 0.8) * 5),
+      "包围盒占画面 " + pct(x.bbox) + "、笔迹覆盖 " + pct(x.coverage));
+
+    push("整合度", g((x.fillDensity * 0.75 + (x.strokes >= 3 ? 0.15 : 0.05) - (x.strokes > 40 ? 0.15 : 0)) * 5),
+      "包围盒内填充密度 " + x.fillDensity.toFixed(2) + "、" + x.strokes + " 笔");
+
+    push("细节丰富度", g((Math.min(x.density / 0.12, 1) * 0.5 + Math.min(x.strokes / 30, 1) * 0.3 + Math.min(x.colors / 5, 1) * 0.2) * 5),
+      "边缘密度 " + x.density.toFixed(3) + "、" + x.strokes + " 笔、" + x.colors + " 种颜色");
+
+    push("线条质量", g((0.45 + x.orientEntropy * 0.35 + (x.lineRatio > 0.4 ? 0.15 : 0)) * 5),
+      "方向熵 " + x.orientEntropy.toFixed(2) + "、直线笔触占比 " + pct(x.lineRatio));
+
+    push("旋转之缺失", g(5 - (x.rotDev / 45) * 4, 1, 5),
+      "主笔触方向 " + Math.round(x.peakAngle) + "°（偏离水平/垂直 " + Math.round(x.rotDev) + "°）");
+
+    push("重复之缺失", x.repeated ? 2 : (x.soft > 6 && x.hueEntropy < 0.5 ? 3 : 5),
+      x.repeated ? "同色反复覆盖、边缘锐利" : "色相熵 " + x.hueEntropy.toFixed(2) + "、柔边笔触 " + x.soft + " 笔");
+
+    NA("色彩贴合度", "画面无具象对象，无法判断颜色是否符合实物");
+    NA("逻辑性", "抽象涂画无情节可判断");
+    NA("写实性", "抽象涂画无写实对照");
+    NA("问题解决", "本测验未设定需要克服的具体目标");
+    NA("发展水平", "需与同龄常模比对，本地无法判断");
+    NA("人物", "画面中未设定人物任务");
+
+    return list;
+  }
+
   function analyze(studio) {
     const src = studio.composite(AW);
     const ctx = src.getContext("2d", { willReadFrequently: true });
@@ -356,20 +403,26 @@
         : "重心居中";
 
     // HTP 风格的派生特征，用于给 AI 与本地叙事提供可解释锚点
-    // 线条方向：orientBins 中 bin 0≈水平，bin 6≈垂直
-    let horiz = 0, vert = 0;
+    // 注意：方向直方图统计的是「亮度梯度方向」，它与实际笔触方向相差 90°。
+    // 因此用倍角圆均值求梯度主方向，再 +90° 换算成笔触方向，避免水平/垂直互相错位。
+    let sx = 0, sy = 0;
     for (let b = 0; b < 12; b++) {
-      const center = (b + 0.5) * Math.PI / 12;
-      const horizV = Math.abs(Math.cos(center));   // 越接近水平，cos 越大
-      const vertV = Math.abs(Math.sin(center));    // 越接近垂直，sin 越大
-      horiz += orientBins[b] * horizV;
-      vert += orientBins[b] * vertV;
+      const th = (b + 0.5) * Math.PI / 12;
+      sx += orientBins[b] * Math.cos(2 * th);
+      sy += orientBins[b] * Math.sin(2 * th);
     }
-    const lineDirection = horiz > vert * 1.25
-      ? "水平为主"
-      : vert > horiz * 1.25
-        ? "垂直为主"
-        : "方向多变";
+    let gradAng = Math.atan2(sy, sx) / 2 * 180 / Math.PI;   // -90..90
+    if (gradAng < 0) gradAng += 180;                        // 0..180
+    const strokeAng = (gradAng + 90) % 180;                 // 笔触主方向
+    const dirConc = orientTotal > 0 ? Math.hypot(sx, sy) / orientTotal : 0;  // 方向集中度 0..1
+    const angDist = (a, b2) => { const d = Math.abs(a - b2) % 180; return Math.min(d, 180 - d); };
+    const lineDirection = orientTotal === 0 || dirConc < 0.30
+      ? "方向多变"
+      : angDist(strokeAng, 0) <= 15
+        ? "水平为主"
+        : angDist(strokeAng, 90) <= 15
+          ? "垂直为主"
+          : "斜向为主";
 
     // 笔触力度（用归一化边缘锐利度近似"用力"程度）
     const pressure = strengthN > 0.62
@@ -403,6 +456,32 @@
     if (maxX >= AW - 2) cutoff.push("右");
     if (minY <= 1) cutoff.push("上");
     if (maxY >= AH - 2) cutoff.push("下");
+
+    // 旋转：主笔触方向偏离水平/垂直的角度
+    const rem = strokeAng % 90;
+    const rotDev = Math.min(rem, 90 - rem);
+    const fillDensity = bboxRatio > 0 ? Math.min(1, coverage / bboxRatio) : 0;
+
+    const feats = buildFeats({
+      tint: inkCount ? 1 - neutralRatio : 0,
+      sat: satAvg,
+      coverage,
+      bbox: bboxRatio,
+      speed: stats.strokeSpeed || 0,
+      strength: strengthN,
+      rawStrength: edgeStrength,
+      strokes: stats.strokes || 0,
+      colors: stats.distinctColors || 0,
+      density: edgeDensity,
+      fillDensity,
+      orientEntropy: orientTotal > 0 ? orientEntropy : 0,
+      lineRatio,
+      soft: stats.soft || 0,
+      hueEntropy,
+      repeated: repeatedInk,
+      peakAngle: strokeAng,
+      rotDev
+    });
 
     return {
       scores,
@@ -442,6 +521,8 @@
         sizeBias: bboxRatio > 2 / 3 ? "画面过大" : bboxRatio < 1 / 9 ? "画面偏小" : "大小适中",
         cutoff: cutoff.length ? cutoff.join("、") + "侧切断" : "未切断"
       },
+      // FEATS 形式元素评分（0–5，含「不适用」项）
+      feats,
       strokeStats: stats,
       process,
       behavior,

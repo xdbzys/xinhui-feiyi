@@ -362,6 +362,12 @@
       archetype,
       summary,
       evidence: evidenceOf(analysis),
+      // 本地 FEATS 评分直接带入，作为报告的「形式元素读数」
+      feats: (analysis.feats || [])
+        .filter((f) => f.score !== null && f.score !== undefined)
+        .map((f) => ({ dim: f.dim, score: f.score, note: f.evidence })),
+      contradictions: [],
+      limitations: "",
       alternative: alternativeOf(analysis),
       confidence: confidenceOf(analysis),
       colors: colorNarrative(analysis),
