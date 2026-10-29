@@ -1642,15 +1642,26 @@
     const ghost = traceCanvas(studio, Math.round(art * 1.05), ghostColor);
     const gw = art * 0.94;
     const gh = (gw / ghost.width) * ghost.height;
+    const gx = inset + (art - gw) / 2;
+    const gy = inset + (art - gh) / 2;
+
+    // 用户原色叠层：用 soft-light 把真实色相透进二创稿，让成品一眼是「你的画」
+    ctx.save();
+    ctx.globalCompositeOperation = "soft-light";
+    ctx.globalAlpha = 0.26;
+    ctx.drawImage(studio.canvas, gx, gy, gw, gh);
+    ctx.restore();
+
+    // 单色骨架：把笔迹结构收拢成清晰可辨的线，叠在原色之上
     ctx.save();
     ctx.globalCompositeOperation = "soft-light";
     ctx.globalAlpha = 0.62;
-    ctx.drawImage(ghost, inset + (art - gw) / 2, inset + (art - gh) / 2, gw, gh);
+    ctx.drawImage(ghost, gx, gy, gw, gh);
     ctx.restore();
     ctx.save();
     ctx.globalCompositeOperation = "multiply";
-    ctx.globalAlpha = 0.1;
-    ctx.drawImage(ghost, inset + (art - gw) / 2, inset + (art - gh) / 2, gw, gh);
+    ctx.globalAlpha = 0.12;
+    ctx.drawImage(ghost, gx, gy, gw, gh);
     ctx.restore();
 
     // 内框细线与轻微暗角，让画面收住

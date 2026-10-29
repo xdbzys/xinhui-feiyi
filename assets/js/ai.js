@@ -447,12 +447,26 @@
   /**
    * 第三步 + 第四步：把意象与工艺写成短提示词。
    * 只有「一件具象作品」这一个中心，模型才不会跑到别的题材上。
+   * 同时回灌用户的真实数据——主色、氛围、构图方位——
+   * 让文本生图模型（CogView-3-Flash 不支持图生图）也能回响原画的骨架与色彩，
+   * 而不是凭空编一张非遗图。控制总字数 ≤72，避免模型失焦。
    */
   function craftBlueprint(analysis, report, style, plan) {
     const b = CRAFT_BRIEF[style] || CRAFT_BRIEF.papercut;
     const p = plan || fallbackPlan(analysis, style);
-    const prompt = "中国" + b.name + "：" + p.imagery + "，" + b.material + "，" +
-      b.accent + "，大面积留白，无文字";
+    const a = analysis || {};
+    const v = a.vision || {};
+    const palette = (a.dominantColors || []).slice(0, 3)
+      .map((c) => c.name).filter(Boolean).join("、");
+    // 视觉模型看到的构图方位，是「复刻原画骨架」最关键的线索；截断避免超出字数预算
+    const layout = (v.layout || "").slice(0, 22);
+    const mood = (v.mood || "").slice(0, 10);
+
+    let prompt = "中国" + b.name + "：" + p.imagery + "，" + b.material + "，" + b.accent;
+    if (palette) prompt += "，主色" + palette;
+    if (mood) prompt += "，" + mood;
+    if (layout) prompt += "，构图" + layout;
+    prompt += "，大面积留白，无文字";
 
     return {
       title: (report && (report.archetype || report.title)) || "心象纹样",
@@ -461,7 +475,10 @@
       motifWeave: p.motifWeave,
       craftNote: p.craftNote,
       prompt,
-      style
+      style,
+      palette,
+      layout,
+      mood
     };
   }
 
