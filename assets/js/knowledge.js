@@ -676,6 +676,110 @@
     return out.join("\n");
   }
 
+  /**
+   * 精简版知识库：供 report() 的 lite 档（免费模型）使用。
+   *
+   * 完整版每次都全量发送，其中相当一部分条目与当前画面无关——
+   * 画里没有树就不需要树的条目，FEATS 标注「不适用」的维度本来就不许评，
+   * 画面只用了蓝绿却把八色的联想全发一遍也只是稀释注意力。
+   * 因此按本地算法与视觉模型的实际判定值裁剪，只送用得上的条目，
+   * 在基本不损失「可援引性」的前提下压低输入 token。
+   *
+   * 不可裁的部分一律保留：解读纪律、边界、调节方法清单，
+   * 以及 Jung / Arnheim / Koch / Machover 四套框架——
+   * 提示词硬性要求逐条解读它们，裁掉等于让模型没得引用。
+   * 裁不掉的兜底：匹配结果过少时自动回退，宁可多送也不让模型失去依据。
+   */
+  function buildKnowledgeBlockLean(analysis) {
+    const a = analysis || {};
+    const v = a.vision || {};
+
+    // ① 画面主色的色相关键字（用于裁剪色彩联想与色彩与性格）
+    const HUES = ["红", "橙", "黄", "绿", "蓝", "紫", "白", "黑", "灰", "棕", "青", "粉"];
+    const colorText = (a.dominantColors || []).map((c) => c.name || "").join("") +
+      (a.colorStyle || "");
+    const activeHues = HUES.filter((h) => colorText.indexOf(h) >= 0);
+    const hueHit = (feature) => {
+      if (!activeHues.length) return true;   // 取不到主色时不裁
+      return activeHues.some((h) => String(feature).indexOf(h) >= 0);
+    };
+
+    // ② 视觉模型实际看到的元素（用于裁剪「常见画面元素」）
+    const seen = ((v.elements || []).join("") + (v.scene || "")).trim();
+    const elementHit = (feature) => {
+      if (!seen) return true;                // 无视觉观察时不裁
+      // "水（海 / 湖 / 河）" → 取 "水" 作为匹配键
+      const key = String(feature).split(/[（\/]/)[0].trim();
+      return key ? seen.indexOf(key) >= 0 : true;
+    };
+
+    // ③ FEATS：只送本地算法已给分的维度（"不适用" 项本就禁止评）
+    const scored = (a.feats || [])
+      .filter((f) => f.score !== null && f.score !== undefined)
+      .map((f) => String(f.dim || ""));
+    const featsHit = (feature) => {
+      if (!scored.length) return true;
+      return scored.some((d) => d && String(feature).indexOf(d) === 0);
+    };
+
+    // 裁剪后若剩得太少，说明匹配没生效，退回全量，避免模型失去依据
+    function pick(arr, hit, minKeep) {
+      const kept = arr.filter((r) => hit(r.feature));
+      return kept.length >= (minKeep || 1) ? kept : arr;
+    }
+
+    const out = ["【可援引的知识库（仅作语言组织的边界，不得编造未列出的结论）】"];
+    out.push("— 空间位置（HTP）—");
+    spatial.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 线条与笔触 —");
+    lines.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 画面整体分析（《中学生绘画心理应用手册》第十八章，含量化阈值）—");
+    htpOverall.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 用笔力度与线条特征（《中学生绘画心理应用手册》第十八章）—");
+    htpLine.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩情绪 —");
+    Object.keys(colors).forEach((k) => out.push("· " + colors[k].name + "：" + colors[k].emotion));
+    out.push("— 绘画色彩分析（《中学生绘画心理应用手册》第二十二章）—");
+    colorAnalysis.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩的心理属性（《色彩心理学》淀本孝雄、藤澤英昭）—");
+    colorAttributes.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩的象征（《色彩心理学》表7，第43–44页）—");
+    colorSymbolism.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩联想（《色彩心理学》表6，第42页；只列画面出现的色相）—");
+    pick(colorAssociation, hueHit, 2).forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩疗法（《色彩心理学》第二章第二节）—");
+    colorTherapy.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 色彩与性格（《色彩心理学》第二章第五节；只列画面出现的色相）—");
+    pick(colorPersonality, hueHit, 2).forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— FEATS 形式元素量表（只列本次已给分的维度）—");
+    pick(featsScales, featsHit, 2).forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 标准化评估的解读纪律（必须遵守）—");
+    assessmentNotes.forEach((n) => out.push("· " + n));
+    out.push("— Jung 曼陀罗理论（自性化与完形）—");
+    jungMandala.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— Arnheim《艺术与视知觉》视觉动力 —");
+    arnheimDynamics.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— Koch 树木人格测验（迁移线条-大小-位置-力度逻辑）—");
+    kochTree.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— Machover 画人测验（迁移压力-大小-位置-修改逻辑）—");
+    machoverPerson.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 常见画面元素（只列本次画面出现的元素）—");
+    pick(elements, elementHit, 2).forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 空间留白 —");
+    space.forEach((r) => out.push("· " + r.feature + "：" + r.meaning));
+    out.push("— 表达性艺术治疗原则（EAT）—");
+    eatPrinciples.forEach((p) => out.push("· " + p));
+    out.push("— 正念手作原则 —");
+    craftPrinciples.forEach((p) => out.push("· " + p));
+    out.push("— 可推荐的情绪调节方法（只能从这里选择 id，步骤与科学依据由系统本地提供）—");
+    regulations.forEach((r) => {
+      out.push("· " + r.id + "：" + r.name + "（" + r.tag + "，" + r.duration + "）");
+    });
+    out.push("— 必须遵守的边界 —");
+    boundaries.forEach((b) => out.push("· " + b));
+    return out.join("\n");
+  }
+
   window.XHFYKnowledge = {
     spatial, lines, colors, elements, space, eatPrinciples, craftPrinciples,
     regulations, behaviorRules, boundaries,
@@ -683,6 +787,8 @@
     colorSymbolism, colorTherapy, colorAssociation, colorPersonality,
     featsScales, assessmentNotes,
     jungMandala, arnheimDynamics, kochTree, machoverPerson,
-    recommendRegulation, buildKnowledgeBlock, buildKnowledgeBlockCompact, buildKnowledgeBlockRich
+    recommendRegulation,
+    buildKnowledgeBlock, buildKnowledgeBlockCompact,
+    buildKnowledgeBlockRich, buildKnowledgeBlockLean
   };
 })();

@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=e8b5f27">
+<link rel="stylesheet" href="assets/css/style.css?v=f3c7d61">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -626,19 +626,42 @@
       <button class="btn btn-ghost btn-small" id="resetKey" type="button">恢复默认</button>
     </div>
     <p class="modal-status" id="aiStatus">状态：未测试</p>
-    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4-Flash（文本）· CogView-3-Flash（图像）。<br>AI 二创（非遗重绘）可直接使用；文本分析在云端不可用时自动切换本地心象引擎，体验一致。</p>
+
+    <div class="tier-box">
+      <div class="tier-head">
+        <span class="tier-label">心灵图鉴分析深度</span>
+        <div class="tier-switch" role="radiogroup" aria-label="分析深度">
+          <button type="button" class="tier-opt" data-tier="lite" role="radio" aria-checked="true">
+            <strong>均衡 · 免费</strong><em>零余额消耗</em>
+          </button>
+          <button type="button" class="tier-opt" data-tier="pro" role="radio" aria-checked="false">
+            <strong>深度 · 付费</strong><em>约 ¥0.1 / 次</em>
+          </button>
+        </div>
+      </div>
+      <p class="tier-hint" id="tierHint"></p>
+    </div>
+
+    <dl class="usage-box">
+      <div><dt>今日 视觉观察</dt><dd id="uVision">—</dd></div>
+      <div><dt>今日 文本生成</dt><dd id="uText">—</dd></div>
+      <div><dt>今日 非遗出图</dt><dd id="uImage">—</dd></div>
+      <div><dt>本次会话 token</dt><dd id="uToken">—</dd></div>
+    </dl>
+
+    <p class="modal-note">当前模型：GLM-4V-Flash（视觉）· GLM-4.7-Flash（图鉴）· CogView-3-Flash（图像）——三者均为免费档。<br>仅「深度」档的图鉴会调用付费的 GLM-4-Plus。AI 不可用时自动切换本地心象引擎，体验一致。</p>
   </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=e8b5f27"></script>
-<script src="assets/js/paint.js?v=e8b5f27"></script>
-<script src="assets/js/analyze.js?v=e8b5f27"></script>
-<script src="assets/js/craft.js?v=e8b5f27"></script>
-<script src="assets/js/knowledge.js?v=e8b5f27"></script>
-<script src="assets/js/ai.js?v=e8b5f27"></script>
-<script src="assets/js/report.js?v=e8b5f27"></script>
-<script src="assets/js/app.js?v=e8b5f27"></script>
+<script src="assets/js/config.js?v=f3c7d61"></script>
+<script src="assets/js/paint.js?v=f3c7d61"></script>
+<script src="assets/js/analyze.js?v=f3c7d61"></script>
+<script src="assets/js/craft.js?v=f3c7d61"></script>
+<script src="assets/js/knowledge.js?v=f3c7d61"></script>
+<script src="assets/js/ai.js?v=f3c7d61"></script>
+<script src="assets/js/report.js?v=f3c7d61"></script>
+<script src="assets/js/app.js?v=f3c7d61"></script>
 </body>
 </html>

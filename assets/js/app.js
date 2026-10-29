@@ -18,6 +18,9 @@
     aiBaseStyle: "",
     aiComposed: false,
     aiBlueprint: null,
+    // 已生成过的二创稿按工艺缓存：切换工艺再切回来直接复用，
+    // 不再重复调用图像模型（图像按张计费/占免费额度，是全流程最贵的一步）。
+    craftCache: {},
     regulations: [],
     regulationIndex: 0,
     busy: false
@@ -411,6 +414,9 @@
     state.busy = true;
     $("#analyzeBtn").disabled = true;
     state.regulationIndex = 0;
+    // 画面变了，此前缓存的各工艺二创稿与意象联想一并失效
+    state.craftCache = {};
+    if (window.XHFYAI) window.XHFYAI.resetPlanCache();
     resetAiArt();
 
     scrollToEl("#step2");
@@ -775,6 +781,55 @@
   /** 未生成时的提示语；换工艺或重画后要把上一轮的意象解读清掉 */
   const AI_NOTE_HINT = "生成后这里会写出 AI 读到的意象与工艺：它把你的线条当作主骨架，用祥云纹、缠枝纹、回字纹填满空白，再以该工艺的材质与光影成画。";
 
+  /** 把当前已生成的二创稿按工艺存入缓存，供切回来时复用 */
+  function cacheAiArt(style) {
+    if (!style || !state.aiImageURL) return;
+    state.craftCache[style] = {
+      imageURL: state.aiImageURL,
+      composed: state.aiComposed,
+      blueprint: state.aiBlueprint
+    };
+  }
+
+  /**
+   * 从缓存恢复某个工艺的二创稿。
+   * 命中就完全不碰网络——图像按张计费，这是全流程最贵的一步，
+   * 用户在几个工艺之间来回切换欣赏时不应该反复出图。
+   */
+  function restoreAiArt(style) {
+    const hit = style && state.craftCache[style];
+    if (!hit) return false;
+    const meta = window.XHFYCraft.META[style] || {};
+    const bp = hit.blueprint || {};
+
+    state.aiImageURL = hit.imageURL;
+    state.aiComposed = hit.composed;
+    state.aiBlueprint = hit.blueprint;
+    state.aiBaseStyle = style;
+
+    const img = $("#aiCraftImg");
+    img.src = hit.imageURL;
+    img.alt = "AI 二创 · " + (meta.short || style);
+    clearCssMask(img);
+    applyAiPattern(hit.imageURL);
+
+    if (hit.composed) $("#aiInkOverlay").hidden = true;
+    else { paintInkOverlay(); $("#aiInkOverlay").hidden = false; }
+
+    $("#aiRedrawNote").textContent = bp.imagery
+      ? window.XHFYAI.craftReadout(bp) : AI_NOTE_HINT;
+    $("#aiArtTitle").textContent = "AI 二创 · " + (meta.short || style) +
+      (bp.imagery ? " · " + bp.imagery : "");
+
+    const dl = $("#aiArtDownload");
+    dl.href = hit.imageURL;
+    dl.download = "心绘非遗_AI二创_" + (meta.short || style) + ".png";
+    dl.hidden = false;
+    if (hit.composed) { dl.removeAttribute("target"); dl.removeAttribute("rel"); }
+    else { dl.target = "_blank"; dl.rel = "noopener"; }
+    return true;
+  }
+
   function resetAiArt() {
     state.aiImageURL = "";
     state.aiBaseStyle = "";
@@ -848,6 +903,7 @@
       state.aiImageURL = composed || url;
       state.aiComposed = !!composed;
       state.aiBaseStyle = style;
+      cacheAiArt(style);
 
       const img = $("#aiCraftImg");
       img.src = state.aiImageURL;
@@ -897,8 +953,19 @@
         if (!style || style === state.craftStyle) return;
         state.craftStyle = style;
         selectCraftTab(style);
-        // 换工艺后，之前的 AI 二创稿不再对应当前工艺，清空等待重新生成
-        if (state.aiImageURL && state.aiBaseStyle !== style) resetAiArt();
+        // 换工艺：先把当前这版存进缓存，再尝试从缓存恢复目标工艺。
+        // 命中缓存就零消耗地切回去，未命中才清空等待重新生成。
+        if (state.aiBaseStyle && state.aiBaseStyle !== style && state.aiImageURL) {
+          cacheAiArt(state.aiBaseStyle);
+        }
+        let cacheHit = "";
+        if (state.aiBaseStyle !== style) {
+          if (restoreAiArt(style)) {
+            cacheHit = "已恢复此前生成的" + window.XHFYCraft.META[style].short + "（未重复出图）";
+          } else {
+            resetAiArt();
+          }
+        }
         updateCraftInfo(style);
         if (state.report && state.analysis) {
           const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision, style);
@@ -912,7 +979,8 @@
           $("#craftElements").textContent = fb.craft.elements;
           renderGuide();
         }
-        toast("已切换到" + window.XHFYCraft.META[style].short + "，点击「AI 二创当前工艺」生成");
+        toast(cacheHit ||
+          ("已切换到" + window.XHFYCraft.META[style].short + "，点击「AI 二创当前工艺」生成"));
       });
     });
 
@@ -1163,6 +1231,61 @@
     const input = $("#apiKeyInput");
     const status = $("#aiStatus");
 
+    /* ---- 分析深度档位：默认走免费模型，全流程零余额消耗 ---- */
+    // 说明里的耗时与费用为实测值（同一幅画、同一套提示词）
+    const TIER_HINT = {
+      lite: "均衡档走免费模型（GLM-4-Flash），视觉、图鉴、意象、出图全部免费，全流程不消耗余额；图鉴约需 50 秒。图鉴质量的大头来自知识库与解读纪律，换旗舰模型带来的是文笔增益，不是证据增益。",
+      pro: "深度档调用付费的 GLM-4-Plus（¥5/百万输入 + ¥15/百万输出，实测单次约 ¥0.07），并加载完整知识库，图鉴约 25 秒、措辞更细腻。适合要打印出来带去答辩的样本。"
+    };
+
+    function syncTier() {
+      const tier = window.XHFYAI.getReportTier();
+      $$(".tier-opt").forEach((b) => {
+        b.setAttribute("aria-checked", b.dataset.tier === tier ? "true" : "false");
+      });
+      $("#tierHint").textContent = TIER_HINT[tier] || "";
+    }
+
+    $$(".tier-opt").forEach((b) => {
+      b.addEventListener("click", () => {
+        const tier = window.XHFYAI.setReportTier(b.dataset.tier);
+        syncTier();
+        toast(tier === "pro"
+          ? "已切到深度档：下一次生成图鉴会调用付费模型"
+          : "已切到均衡档：全流程免费模型，不消耗余额");
+      });
+    });
+
+    /* ---- 用量面板 ---- */
+    function syncUsage() {
+      const u = window.XHFYAI.usage();
+      const rows = [
+        ["uVision", "vision"],
+        ["uText", "text"],
+        ["uImage", "image"]
+      ];
+      rows.forEach(([elId, kind]) => {
+        const q = u.quota[kind];
+        const used = u.day[kind] || 0;
+        const el = $("#" + elId);
+        if (!el) return;
+        el.textContent = used + " / " + q.day;
+        el.className = used >= q.day * 0.8 ? "warn" : "";
+      });
+      const tk = window.XHFYAI.tokenStat;
+      const total = tk.prompt + tk.completion;
+      const tkEl = $("#uToken");
+      if (tkEl) {
+        tkEl.textContent = tk.calls
+          ? total.toLocaleString() + "（" + tk.calls + " 次调用）"
+          : "0";
+      }
+      if (u.tripped) {
+        status.textContent = "状态：已暂停 · " + u.tripped;
+        status.className = "modal-status err";
+      }
+    }
+
     const open = () => {
       modal.hidden = false;
       setNoScroll(true);
@@ -1170,6 +1293,8 @@
       input.placeholder = window.XHFYAI.hasCustomKey() ? "已保存自定义 Key（留空则不修改）" : "使用项目内置 Key，可粘贴自己的 Key";
       status.textContent = "状态：使用" + (window.XHFYAI.hasCustomKey() ? "自定义 Key" : "项目内置 Key");
       status.className = "modal-status";
+      syncTier();
+      syncUsage();
     };
     const close = () => {
       modal.hidden = true;
@@ -1217,6 +1342,8 @@
       if (!modal.hidden) close();
       else if (!$("#reportOverlay").hidden) closeReport();
     });
+
+    syncTier();
   }
 
   /* ---------------- 启动 ---------------- */

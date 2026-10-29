@@ -31,6 +31,109 @@
     try { return !!localStorage.getItem(STORAGE_KEY); } catch (e) { return false; }
   }
 
+  /* =========================================================
+     用量预算与熔断
+     目的：内置 Key 是所有访客共享的有限额度，必须防止
+     ① 余额耗尽后继续无效重试（每次重试同样计费）；
+     ② 单用户反复触发高并发调用刷爆额度；
+     ③ 网络瞬断时的重试风暴。
+     计数按「自然日」持久化，熔断状态只在此次会话内生效，
+     刷新页面可恢复，避免一次误判把用户永久挡在外面。
+     ========================================================= */
+
+  // 每日配额（按调用类型分开管：图像最贵，文本最便宜）
+  const QUOTA = {
+    vision: { day: 60, session: 8, label: "视觉观察" },
+    text: { day: 200, session: 30, label: "文本生成" },
+    image: { day: 60, session: 10, label: "非遗出图" }
+  };
+  const BUDGET_KEY = "xhfy.budget.v1";
+
+  // 本次会话内的计数（不落盘，刷新即清零）
+  const sessionUse = { vision: 0, text: 0, image: 0 };
+
+  // 会话级熔断：一旦判定余额/鉴权不可用，本次会话不再发任何请求
+  let tripped = "";
+
+  function today() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+      "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function readBudget() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(BUDGET_KEY) || "{}");
+      if (raw.date !== today()) return { date: today(), vision: 0, text: 0, image: 0 };
+      return {
+        date: raw.date,
+        vision: raw.vision || 0,
+        text: raw.text || 0,
+        image: raw.image || 0
+      };
+    } catch (e) {
+      return { date: today(), vision: 0, text: 0, image: 0 };
+    }
+  }
+
+  function writeBudget(b) {
+    try { localStorage.setItem(BUDGET_KEY, JSON.stringify(b)); } catch (e) {}
+  }
+
+  function usage() {
+    const day = readBudget();
+    return {
+      day, session: { vision: sessionUse.vision, text: sessionUse.text, image: sessionUse.image },
+      quota: QUOTA, tripped
+    };
+  }
+
+  /**
+   * 检查是否还能发起一次调用。
+   * 返回 null 表示放行，返回字符串表示应拒绝的原因。
+   */
+  function checkBudget(kind) {
+    if (tripped) return "AI 已暂停：" + tripped;
+    const q = QUOTA[kind];
+    if (!q) return null;
+    const day = readBudget();
+    if (day[kind] >= q.day) return "今日「" + q.label + "」额度已用完，已切换本地心象引擎";
+    if (sessionUse[kind] >= q.session) return "本次会话「" + q.label + "」次数已达上限，刷新页面可继续";
+    return null;
+  }
+
+  function spend(kind) {
+    sessionUse[kind] = (sessionUse[kind] || 0) + 1;
+    const day = readBudget();
+    day[kind] = (day[kind] || 0) + 1;
+    writeBudget(day);
+  }
+
+  /** 主动熔断：余额/鉴权类问题一旦确认，本次会话不再白扣 */
+  function trip(reason) {
+    if (!tripped) tripped = reason;
+  }
+
+  function clearTrip() { tripped = ""; }
+
+  /**
+   * 判定错误是否「重试也没用」。
+   * 这类错误重试只会再扣一次费，必须立即失败并按需熔断。
+   */
+  function isFatal(e) {
+    const msg = String((e && e.message) || "");
+    const status = e && e.status;
+    // 智谱业务码：1113 余额不足 / 1112 鉴权失败 / 1111 参数错误 / 1211 模型不存在
+    if (/1113|余额不足|无可用资源包|额度不足/.test(msg)) return "余额不足";
+    if (/1112|鉴权|未授权|无效的.*[Kk]ey|Unauthorized/i.test(msg)) return "API Key 无效";
+    if (/1211|模型不存在/.test(msg)) return "模型不可用";
+    if (/1111|参数错误|invalid_request/i.test(msg)) return "请求参数有误";
+    if (status === 401 || status === 403) return "API Key 无效";
+    if (status === 402) return "余额不足";
+    if (status === 422 || status === 400) return "请求参数有误";
+    return "";
+  }
+
   function extractJSON(text) {
     if (!text) return null;
     let t = String(text).trim();
@@ -52,7 +155,12 @@
     }
   }
 
-  async function call(path, payload, timeout) {
+  async function call(path, payload, timeout, kind) {
+    // 熔断优先：已经判定不可用时，连请求都不发，避免每次都白扣一次
+    if (tripped) throw new Error("AI 已暂停：" + tripped);
+    const blocked = checkBudget(kind || "text");
+    if (blocked) throw new Error(blocked);
+
     const key = getKey();
     if (!key) throw new Error("缺少 API Key");
     const ctrl = new AbortController();
@@ -71,6 +179,11 @@
     if (relay) attempts.push({ url: relay.replace("{url}", encodeURIComponent(full)), label: "中继" });
 
     let lastErr = null;
+    // 服务端明确返回的错误（带 HTTP status）。必须保留它的原始消息：
+    // 若一律换成「服务暂不可用」这类通用文案，上层就无法区分
+    // 「模型限流（换个模型即可）」与「网络不通（换模型也没用）」，
+    // 免费模型的降级链会因此失效。
+    let serverErr = null;
     for (const attempt of attempts) {
       try {
         const res = await fetch(attempt.url, {
@@ -89,15 +202,30 @@
           err.status = res.status;
           throw err;
         }
+        spend(kind || "text");
         return data;
       } catch (e) {
         lastErr = e;
         if (e && e.name === "AbortError") break;
+        // 致命错误（余额不足 / Key 无效 / 模型不存在）重试同样计费且不会成功：
+        // 立即熔断并抛出，不再尝试中继，避免一次故障被放大成多次扣费。
+        const fatal = isFatal(e);
+        if (fatal) {
+          clearTimeout(timer);
+          if (/余额|Key|鉴权/.test(fatal)) trip(fatal);
+          throw new Error(fatal);
+        }
+        if (e && e.status) serverErr = e;
         console.warn("[心绘非遗] " + attempt.label + " 请求失败", e && e.message);
+        // 限流是模型侧的状态，走中继也一样限流，不再白试一次
+        if (isOverloaded(e)) break;
       }
     }
     clearTimeout(timer);
     if (lastErr && lastErr.name === "AbortError") throw new Error("AI 响应超时");
+    // 服务端给过明确答复的，原样上抛（保留错误码，供上层判断可否降级）；
+    // 一次都没收到响应的，才按网络不通处理。
+    if (serverErr) throw serverErr;
     throw new Error("AI 服务暂不可用，已切换本地心象引擎");
   }
 
@@ -111,12 +239,21 @@
       top_p: 0.9
     };
     if (o.json) payload.response_format = { type: "json_object" };
-    const data = await call("/chat/completions", payload, o.timeout || 60000);
+    const data = await call("/chat/completions", payload, o.timeout || 60000, o.kind || "text");
     const content = data && data.choices && data.choices[0] &&
       data.choices[0].message && data.choices[0].message.content;
+    // 缓存 token 用量，供用量面板展示（智谱在 usage 中回传）
+    if (data && data.usage) {
+      tokenStat.calls += 1;
+      tokenStat.prompt += data.usage.prompt_tokens || 0;
+      tokenStat.completion += data.usage.completion_tokens || 0;
+    }
     if (!content) throw new Error("AI 未返回内容");
     return content;
   }
+
+  // 本次会话累计 token（仅统计，用于用量面板与容量评估）
+  const tokenStat = { calls: 0, prompt: 0, completion: 0 };
 
   function describeProcess(a) {
     const p = a.process || {};
@@ -194,6 +331,7 @@
       }
     ], {
       model: AI.visionModel,
+      kind: "vision",
       temperature: 0.4,
       maxTokens: 500,
       json: true,
@@ -217,9 +355,80 @@
     };
   }
 
+  /* ---------------- 图鉴档位 ---------------- */
+  // lite：免费模型，全流程零余额消耗（默认）
+  // pro ：旗舰模型，单次约 ¥0.1，用于需要打印带去答辩的样本
+  const TIER_KEY = "xhfy.report.tier";
+  let reportTier = "lite";
+  try {
+    const saved = localStorage.getItem(TIER_KEY);
+    if (saved === "lite" || saved === "pro") reportTier = saved;
+    else reportTier = AI.defaultReportTier || "lite";
+  } catch (e) { reportTier = AI.defaultReportTier || "lite"; }
+
+  function getReportTier() { return reportTier; }
+
+  function setReportTier(tier) {
+    reportTier = tier === "pro" ? "pro" : "lite";
+    try { localStorage.setItem(TIER_KEY, reportTier); } catch (e) {}
+    return reportTier;
+  }
+
+  function reportModel() {
+    return reportTier === "pro"
+      ? (AI.reportModelPro || "glm-4-plus")
+      : (AI.reportModelLite || "glm-4-flash");
+  }
+
+  /** 1305 = 该模型访问量过大；换下一个候选模型即可，不必整段失败 */
+  function isOverloaded(e) {
+    const msg = String((e && e.message) || "");
+    return /1305|访问量过大|系统繁忙|稍后再试|rate.?limit/i.test(msg);
+  }
+
+  /**
+   * 按候选模型链依次尝试。
+   * 限流类错误才换下一个模型；余额/Key 类致命错误直接抛出，避免重复计费。
+   */
+  async function chatWithFallback(messages, opts, fallbacks) {
+    // 候选去重：reportModelLiteFallback 与 textModel 常常是同一个模型，
+    // 不去重会让它被尝试两次，第二次还只能分到「试水用」的短超时。
+    const list = [];
+    [opts.model].concat(fallbacks || []).filter(Boolean).forEach((m) => {
+      if (list.indexOf(m) < 0) list.push(m);
+    });
+    let lastErr = null;
+    for (let i = 0; i < list.length; i++) {
+      // 只有第一个候选（高配但可能繁忙的免费模型）用较短超时试水：
+      // 它卡住时不让用户干等满，早点降级。降级后的模型是稳的主力，要给足时间。
+      const isProbe = i === 0 && list.length > 1;
+      const timeout = isProbe
+        ? Math.min(45000, opts.timeout || 60000)
+        : opts.timeout;
+      try {
+        return await chat(messages, Object.assign({}, opts, { model: list[i], timeout }));
+      } catch (e) {
+        lastErr = e;
+        if (isFatal(e)) throw e;
+        // 限流（1305）与超时都算「这个候选当前不可用」。
+        // 免费的高配模型高负载时未必乖乖返回 1305，也可能直接把请求挂住，
+        // 所以超时同样要触发降级，否则用户会卡在等待里。
+        const overloaded = isOverloaded(e) || (e && e.name === "AbortError");
+        if (!overloaded) throw e;
+        console.warn("[心绘非遗] 模型 " + list[i] + " 不可用，降级到下一个候选");
+      }
+    }
+    throw lastErr || new Error("AI 服务暂不可用");
+  }
+
   async function report(analysis, userText, visionData) {
     const v = visionData || {};
     const regIds = window.XHFYKnowledge.regulations.map((r) => r.id).join("/");
+    // lite 档用按画面裁剪过的精简知识库：省输入 token，也让模型更少跑题；
+    // pro 档保留完整知识库，换取更细腻的措辞。
+    const knowledge = reportTier === "pro"
+      ? window.XHFYKnowledge.buildKnowledgeBlockRich()
+      : window.XHFYKnowledge.buildKnowledgeBlockLean(analysis);
     const prompt = [
       "你是「心绘非遗」的绘画心理投射分析师。理论框架限定为：HTP 屋树人投射测验、表达性艺术治疗（EAT / ETC 连续系统）、应用色彩心理学、Jung 曼陀罗理论（自性化与完形）、Arnheim《艺术与视知觉》视觉动力、Koch 树木人格测验（Baum Test）、Machover 画人测验（Draw-A-Person）、FEATS 形式元素量表、正念手作（MBCT / MBSR）。",
       "任务是做一次可复核的严格分析，不是写安慰文。宁可说「难以判断」，也不要编造。",
@@ -248,7 +457,7 @@
         "；氛围:" + (v.mood || "无") + "；观察:" + (v.note || "无"),
       "【用户自述】" + (userText || "无"),
       "",
-      window.XHFYKnowledge.buildKnowledgeBlockRich(),
+      knowledge,
       "",
       "【引用格式示范（必须照此格式在 colors/lines/space/evidence 中出现书名）】",
       "evidence 示例：\"暖色占比 70% → 情感能量偏向外放（来源：《中学生绘画心理应用手册》暖色调）\"",
@@ -281,16 +490,28 @@
       })
     ].join("\n");
 
-    const content = await chat([
-      { role: "system", content: "你是严谨的绘画心理投射分析师，只输出合法 JSON，中文，无 markdown。不确定时明确写出不确定。" },
-      { role: "user", content: prompt }
-    ], {
-      model: AI.reportModel || AI.textModel,
+    // 各字段字数要求合计约 2400 汉字 ≈ 1500–1900 token，加上 JSON 结构开销，
+    // 2400 足够；给到 3000 只是让模型多生成一段不会用到的余量，
+    // 对免费模型来说等于白白多等二三十秒。pro 档保留宽松上限。
+    const tierOpts = {
+      kind: "text",
       temperature: 0.35,
-      maxTokens: 3000,
+      maxTokens: reportTier === "pro" ? 3000 : 2400,
       json: true,
-      timeout: 120000
-    });
+      // 免费模型的生成速度明显慢于旗舰模型，超时要给足，
+      // 否则输出会被截断成半个 JSON，反而触发本地兜底
+      timeout: reportTier === "pro" ? 120000 : 180000
+    };
+    const content = reportTier === "pro"
+      ? await chat([
+          { role: "system", content: "你是严谨的绘画心理投射分析师，只输出合法 JSON，中文，无 markdown。不确定时明确写出不确定。" },
+          { role: "user", content: prompt }
+        ], Object.assign({}, tierOpts, { model: reportModel() }))
+      : await chatWithFallback([
+          { role: "system", content: "你是严谨的绘画心理投射分析师，只输出合法 JSON，中文，无 markdown。不确定时明确写出不确定。" },
+          { role: "user", content: prompt }
+        ], Object.assign({}, tierOpts, { model: reportModel() }),
+          [AI.reportModelLiteFallback, AI.textModel].filter(Boolean));
 
     const parsed = extractJSON(content);
     if (!parsed) throw new Error("图鉴生成格式异常");
@@ -313,7 +534,7 @@
     const content = await chat([
       { role: "system", content: "只输出合法 JSON，中文，无 markdown。" },
       { role: "user", content: prompt }
-    ], { model: AI.textModel, temperature: 0.9, maxTokens: 120, json: true, timeout: 15000 });
+    ], { model: AI.textModel, kind: "text", temperature: 0.9, maxTokens: 120, json: true, timeout: 15000 });
 
     const parsed = extractJSON(content);
     if (!parsed || !parsed.say) throw new Error("陪伴引导格式异常");
@@ -393,8 +614,19 @@
   /**
    * 第一步 + 第二步：读懂线条背后的潜意识，给出具象意象与工艺判断。
    * 走一次轻量文本模型；失败时退回本地联想，保证二创永不中断。
+   *
+   * 只缓存 AI 真正给出的结果：本地兜底方案不进缓存，
+   * 否则一次网络抖动会把整场演示锁死在兜底文案上。
    */
+  const planCache = {};
+
+  function resetPlanCache() {
+    Object.keys(planCache).forEach((k) => delete planCache[k]);
+  }
+
   async function craftPlan(analysis, report, style) {
+    if (planCache[style]) return planCache[style];
+
     const v = (analysis && analysis.vision) || {};
     const s = (analysis && analysis.scores) || {};
     const m = (analysis && analysis.metrics) || {};
@@ -403,45 +635,46 @@
     const colors = (analysis && analysis.dominantColors || []).slice(0, 3)
       .map((c) => c.name).filter(Boolean).join("、");
 
+    // 提示词只保留与输出字段有关的部分：
+    // 「艺术重构 / 材质光影」原是写给图像模型的，对这里的四个输出字段没有贡献，
+    // 从提示词里挪进 motifWeave 的要求即可，省掉两次空转的输入 token。
     const prompt = [
-      "【第一步 极简骨架提取与意象联想】",
-      "用户画的只是线条，你要读懂它背后的潜意识：一团乱麻可能是纠结的内心，可化作盘踞的螭龙；",
-      "简单的一撇一捺可能是冲破束缚的翅膀，可化作展翅的纸鸢。",
-      "必须给出一个极其高级、具象的自然或人文意象（如飞天、瑞兽、游鱼、兰花、水波纹、纸鸢、仙鹤、螭龙、云气、莲、牡丹）。",
-      "绝不能只描述线条本身，必须描述你联想到的具体事物。",
-      "【第二步 精准的非遗匹配】",
-      "用户当前所选工艺：" + (meta.short || style) + "。请判断它是否是最契合的载体：",
-      "线条狂放断裂感强→皮影；线条细腻长短错落→苏绣；线条交错复杂→竹编；线条首尾相连成环→绳结；",
-      "线条闭合且色块分明→掐丝珐琅；大面积留白气韵生动→扎染或剪纸。",
-      "若更契合别的工艺，在 craftNote 里说明，但仍按用户所选工艺输出。",
-      "【第三步 艺术重构】保留用户原始线条作为画面主骨架，用繁复精美的祥云纹、缠枝纹、回字纹、水波纹填补线条之间的空白。",
-      "【第四步 材质光影】红纸毛边、皮影斑驳透光、靛蓝自然晕染；背景用高级宣纸肌理或暗调光影。",
+      "你融合了东方美学大师、非遗传承人、心理分析师三重身份。",
+      "用户画的只是线条，读懂它背后的潜意识：一团乱麻可能是纠结的内心，可化作盘踞的螭龙；",
+      "一撇一捺可能是冲破束缚的翅膀，可化作展翅的纸鸢。",
+      "必须给出具象的自然或人文意象（飞天、瑞兽、游鱼、兰花、水波纹、纸鸢、仙鹤、螭龙、云气、莲、牡丹之类），",
+      "绝不能只描述线条本身。",
+      "工艺匹配：线条狂放断裂→皮影；细腻长短错落→苏绣；交错复杂→竹编；首尾相连成环→绳结；",
+      "闭合且色块分明→掐丝珐琅；大面积留白气韵生动→扎染或剪纸。",
+      "当前工艺：" + (meta.short || style) + "。若更契合别的工艺，在 craftNote 说明，但仍按当前工艺输出。",
       "",
       "画面证据：",
       "- 线条走向：" + (htp.lineDirection || "方向多变") + "；笔触压力：" + (htp.pressure || "适中"),
       "- 内在张力 " + (s.tension || 50) + "/100，秩序感 " + (s.order || 50) + "/100，留白占比 " + (s.space || 50) + "%",
       "- 覆盖度 " + Math.round((m.coverage || 0) * 100) + "%，主色 " + (colors || "未提取"),
-      "- 视觉模型看到的布局：" + (v.layout || "无"),
-      "- 视觉模型看到的元素：" + ((v.elements || []).join("、") || "无"),
-      "- 心象图鉴标题：" + ((report && (report.archetype || report.title)) || "未命名"),
+      "- 布局：" + (v.layout || "无") + "；元素：" + ((v.elements || []).join("、") || "无"),
+      "- 心象图鉴：" + ((report && (report.archetype || report.title)) || "未命名"),
       "",
-      '只输出 JSON：{"imagery":"≤12字具象意象，如：盘踞的螭龙","imageryWhy":"≤40字：为什么这几笔让你想到它","motifWeave":"≤50字：用哪种纹样、怎样填补线条之间的空白","craftNote":"≤40字：为何此工艺最契合，或更契合的工艺"}'
+      '只输出 JSON：{"imagery":"≤12字具象意象，如：盘踞的螭龙","imageryWhy":"≤40字：为什么这几笔让你想到它","motifWeave":"≤50字：选祥云纹/缠枝纹/回字纹/水波纹等具体纹样，说明怎样填补线条之间的空白","craftNote":"≤40字：为何此工艺最契合，或更契合的工艺"}'
     ].join("\n");
 
     try {
       const content = await chat([
         { role: "system", content: ARTIST_SYSTEM },
         { role: "user", content: prompt }
-      ], { model: AI.textModel, temperature: 1.0, maxTokens: 400, json: true, timeout: 40000 });
+      ], { model: AI.textModel, kind: "text", temperature: 1.0, maxTokens: 400, json: true, timeout: 40000 });
       const parsed = extractJSON(content);
       const base = fallbackPlan(analysis, style);
       if (!parsed) return base;
-      return {
+      const plan = {
         imagery: String(parsed.imagery || base.imagery).slice(0, 20),
         imageryWhy: String(parsed.imageryWhy || base.imageryWhy).slice(0, 80),
         motifWeave: String(parsed.motifWeave || base.motifWeave).slice(0, 100),
         craftNote: String(parsed.craftNote || base.craftNote).slice(0, 80)
       };
+      // 只缓存模型真正给出的结果，兜底方案不进缓存
+      planCache[style] = plan;
+      return plan;
     } catch (e) {
       return fallbackPlan(analysis, style);
     }
@@ -504,7 +737,7 @@
       model: AI.imageModel || "cogview-3-flash",
       prompt,
       size: "1024x1024"
-    }, 90000);
+    }, 90000, "image");
 
     const url = data && data.data && data.data[0] && data.data[0].url;
     if (!url) throw new Error("图像模型未返回图片");
@@ -569,6 +802,14 @@
     describeProcess,
     test,
     extractJSON,
+    // 用量与档位（供设置面板显示与切换）
+    usage,
+    tokenStat,
+    getReportTier,
+    setReportTier,
+    reportModel,
+    resetPlanCache,
+    clearTrip,
     defaultKeyAvailable: !!DEFAULT_KEY
   };
 })();
