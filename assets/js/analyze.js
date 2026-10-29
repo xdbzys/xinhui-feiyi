@@ -466,7 +466,9 @@
         ((process.changes >= 3) ? 4 : 0), // 反复修正的纠结
         6, 94
       ),
-      space: clamp(96 - coverage * 125, 10, 96),
+      // 留白占比：画面空白处占整张画纸的百分比，= (1 - 笔墨覆盖度) × 100。
+      // 这是一项可直接复核的几何量，不是抽象指数；数值越高代表留白越多（越高越空）。
+      space: clamp(Math.round((1 - coverage) * 100), 0, 100),
       grounded: clamp(42 + (bottomWeight - 0.33) * 105 + (0.5 - Math.abs(cx - 0.5)) * 42 + symmetry * 18, 6, 96),
       vitality: clamp(12 + tintRatio * 30 + satAvg * 40 + greenRatio * 60 + softRatio * 10 + Math.min(coverage, 0.5) * 40, 4, 96),
       order: clamp(symmetry * 48 + (orientTotal > 0 ? (1 - orientEntropy) * 38 : 0) + (hueTotal > 0 ? (1 - hueEntropy) * 14 : 0), 6, 96),
