@@ -69,6 +69,26 @@
       use: "刺绣画稿 / 团扇 / 服饰纹样",
       note: "小提示：刺绣最讲究「丝理」——线条的方向就是丝线的走向，顺着它绣才会发亮。",
       palette: ["#B23A48", "#E0A8B0", "#6B8FA8"]
+    },
+    cloisonne: {
+      name: "非遗掐丝珐琅 · 铜丝填釉",
+      badge: "掐丝珐琅",
+      short: "掐丝珐琅",
+      desc: "先用铜丝沿着你的笔迹「掐」出轮廓，再一格一格填进青蓝釉料、点蓝烧蓝。心象被烧制成一件景泰蓝：坚硬、温润，而且不会褪色。",
+      grammar: "掐丝 · 点蓝 · 烧蓝 · 鎏金",
+      use: "掐丝珐琅画 / 书签 / 冰箱贴底稿",
+      note: "小提示：掐丝珐琅讲究「丝断意连」——线条断开的地方，釉色会替你接上。",
+      palette: ["#1B4A82", "#3FA0B8", "#C9A227"]
+    },
+    knot: {
+      name: "非遗绳结 · 盘长同心",
+      badge: "非遗绳结",
+      short: "绳结",
+      desc: "把你的笔迹搓成一根红绳，一穿一绕地打成盘长结。绳没有头也没有尾，像那些一直在你心里循环、却也一直护着你的念头。",
+      grammar: "盘长 · 穿绕 · 结耳 · 流苏",
+      use: "中国结挂饰 / 车挂 / 手绳底稿",
+      note: "小提示：绳结讲究「一线到底」。你画得越连贯，编出来的结越圆润完整。",
+      palette: ["#B02A22", "#E0705F", "#F2C14E"]
     }
   };
 
@@ -1679,6 +1699,227 @@
     return out;
   }
 
+  /**
+   * 掐丝珐琅（景泰蓝）：铜丝掐出轮廓 → 格内点蓝 → 烧蓝 → 鎏金收边。
+   * 视觉特征：深蓝釉底 + 金属金丝勾边 + 青绿釉料填充。
+   */
+  function drawCloisonne(ctx, W, maskData, rng) {
+    const { mask, core, edge } = maskData;
+    const GOLD = "#C9A227";
+    const GOLD_DEEP = "#7E5F0E";
+    const GOLD_LIGHT = "#F3E0A0";
+
+    // ① 釉底：景泰蓝深蓝，带窑变渐变
+    const bg = ctx.createLinearGradient(0, 0, W, W);
+    bg.addColorStop(0, "#12305C");
+    bg.addColorStop(0.5, "#1B4A82");
+    bg.addColorStop(1, "#0E2748");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, W);
+
+    // 釉面窑变：釉料在高温下流动形成的不均匀色斑
+    for (let i = 0; i < 9; i++) {
+      const x = rng() * W;
+      const y = rng() * W;
+      const r = W * (0.1 + rng() * 0.22);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, "rgba(72,150,178," + (0.05 + rng() * 0.06).toFixed(3) + ")");
+      g.addColorStop(1, "rgba(72,150,178,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, W);
+    }
+
+    // ② 点蓝：把青蓝釉料填进「铜丝格」里（以核心区为界）
+    const enamel = document.createElement("canvas");
+    enamel.width = W;
+    enamel.height = W;
+    const ectx = enamel.getContext("2d");
+    const eg = ectx.createLinearGradient(0, 0, W, W);
+    eg.addColorStop(0, "#2E7FA8");
+    eg.addColorStop(0.45, "#43A6BC");
+    eg.addColorStop(1, "#1F5C86");
+    ectx.fillStyle = eg;
+    ectx.fillRect(0, 0, W, W);
+    // 点蓝留下的深浅釉斑
+    for (let i = 0; i < 46; i++) {
+      const x = rng() * W;
+      const y = rng() * W;
+      const r = W * (0.004 + rng() * 0.018);
+      ectx.beginPath();
+      ectx.arc(x, y, r, 0, Math.PI * 2);
+      ectx.fillStyle = rng() > 0.5 ? "rgba(140,208,212,0.20)" : "rgba(14,52,88,0.24)";
+      ectx.fill();
+    }
+    ectx.globalCompositeOperation = "destination-in";
+    ectx.drawImage(maskCanvas(core, W), 0, 0);
+    ctx.drawImage(enamel, 0, 0);
+
+    // ③ 格内掐丝纹样：云纹与缠枝，模拟把大块釉面隔成小格的铜丝
+    const wire = document.createElement("canvas");
+    wire.width = W;
+    wire.height = W;
+    const wctx = wire.getContext("2d");
+    vineScroll(wctx, W * 0.5, W * 0.5, W * 0.30, GOLD, 0.72, 2.2);
+    [[0.32, 0.34], [0.68, 0.34], [0.32, 0.66], [0.68, 0.66]].forEach((p) => {
+      cloudMotif(wctx, W * p[0], W * p[1], W * 0.026, GOLD, 0.66);
+    });
+    wctx.globalCompositeOperation = "destination-in";
+    wctx.drawImage(maskCanvas(core, W), 0, 0);
+    ctx.drawImage(wire, 0, 0);
+
+    // ④ 掐丝：铜丝沿轮廓走一圈，多次微偏移描边使其圆润立体
+    const wireW = Math.max(1.1, W * 0.0019);
+    ctx.drawImage(edgeCanvas(edge, W, GOLD_DEEP, 1), 0, 0);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (!dx && !dy) continue;
+        ctx.drawImage(edgeCanvas(edge, W, GOLD, 1), dx * wireW * 0.5, dy * wireW * 0.5);
+      }
+    }
+    ctx.drawImage(edgeCanvas(edge, W, GOLD_LIGHT, 0.5), -wireW * 0.6, -wireW * 0.6);
+
+    // ⑤ 鎏金收边（回字纹）
+    const m = W * 0.052;
+    meanderBorder(ctx, m, m, W - m * 2, W - m * 2, "rgba(201,162,39,0.42)", Math.max(0.8, W * 0.0011), W * 0.012);
+
+    // ⑥ 釉面高光：烧蓝后的一层玻璃质光泽
+    const gloss = ctx.createLinearGradient(0, 0, W, W);
+    gloss.addColorStop(0, "rgba(255,255,255,0.10)");
+    gloss.addColorStop(0.4, "rgba(255,255,255,0.02)");
+    gloss.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gloss;
+    ctx.fillRect(0, 0, W, W);
+  }
+
+  /**
+   * 绳结（中国结）：笔迹搓成红绳 → 螺旋捻纹 → 打成盘长结 → 垂流苏。
+   * 视觉特征：正红绳身 + 斜向捻纹 + 盘长结耳 + 底部流苏。
+   */
+  function drawKnot(ctx, W, maskData, rng) {
+    const { mask, core, edge } = maskData;
+    const CORD = "#B02A22";
+    const CORD_DEEP = "#6E1512";
+    const CORD_LIGHT = "#E2846F";
+    const GOLD = "#F2C14E";
+
+    // ① 织锦底
+    paperBase(ctx, W, "#FBF3E6", rng);
+    const vg = ctx.createRadialGradient(W / 2, W / 2, W * 0.3, W / 2, W / 2, W * 0.8);
+    vg.addColorStop(0, "rgba(176,42,34,0)");
+    vg.addColorStop(1, "rgba(120,60,40,0.10)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, W);
+
+    // ② 绳身：先把笔迹铺成正红绳
+    ctx.save();
+    ctx.globalAlpha = 0.20;
+    ctx.filter = "blur(" + Math.max(2, W * 0.004) + "px)";
+    ctx.drawImage(colorize(mask, W, CORD_DEEP, 1), W * 0.006, W * 0.008);
+    ctx.restore();
+    ctx.drawImage(colorize(mask, W, CORD, 1), 0, 0);
+
+    // ③ 螺旋捻纹：斜向条纹压在绳身上，形成"搓绳"的立体感
+    const step = W * 0.03;
+    const twist = document.createElement("canvas");
+    twist.width = W;
+    twist.height = W;
+    const tctx = twist.getContext("2d");
+    tctx.lineCap = "round";
+    tctx.strokeStyle = CORD_DEEP;
+    tctx.lineWidth = Math.max(1, W * 0.0028);
+    tctx.globalAlpha = 0.42;
+    for (let d = -W; d < W * 2; d += step) {
+      tctx.beginPath();
+      tctx.moveTo(d, 0);
+      tctx.lineTo(d + W, W);
+      tctx.stroke();
+    }
+    // 高光：与暗纹错开半格，绳身就有了圆润的凸起
+    tctx.strokeStyle = CORD_LIGHT;
+    tctx.lineWidth = Math.max(1, W * 0.0018);
+    tctx.globalAlpha = 0.34;
+    for (let d = -W; d < W * 2; d += step) {
+      tctx.beginPath();
+      tctx.moveTo(d + step * 0.45, 0);
+      tctx.lineTo(d + step * 0.45 + W, W);
+      tctx.stroke();
+    }
+    tctx.globalAlpha = 1;
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.drawImage(maskCanvas(mask, W), 0, 0);
+    ctx.drawImage(twist, 0, 0);
+
+    // ④ 绳边：沿轮廓压一道深色，让绳与绳之间分得开
+    ctx.drawImage(edgeCanvas(edge, W, CORD_DEEP, 0.55), 0, 0);
+
+    // ⑤ 盘长结：在绳身厚实处点缀中国结（一线到底，循环不断）
+    const knots = document.createElement("canvas");
+    knots.width = W;
+    knots.height = W;
+    const kctx = knots.getContext("2d");
+    const kp = [[0.5, 0.5], [0.30, 0.32], [0.70, 0.32], [0.30, 0.68], [0.70, 0.68]];
+    kp.forEach((p, i) => {
+      knotMotif(kctx, W * p[0], W * p[1], W * (i === 0 ? 0.062 : 0.036), CORD_DEEP, Math.max(1, W * 0.0022), 0.62);
+      knotMotif(kctx, W * p[0], W * p[1] - W * 0.003, W * (i === 0 ? 0.062 : 0.036), CORD_LIGHT, Math.max(1, W * 0.0011), 0.5);
+    });
+    kctx.globalCompositeOperation = "destination-in";
+    kctx.drawImage(maskCanvas(core, W), 0, 0);
+    ctx.drawImage(knots, 0, 0);
+
+    // ⑥ 流苏：底部垂下的穗子，是绳结的收尾
+    const tx = W * 0.5;
+    const ty = W * 0.90;
+    ctx.save();
+    ctx.strokeStyle = CORD;
+    ctx.lineCap = "round";
+    for (let i = -5; i <= 5; i++) {
+      ctx.globalAlpha = 0.5 + rng() * 0.3;
+      ctx.lineWidth = Math.max(1, W * 0.0016);
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.quadraticCurveTo(tx + i * W * 0.006, ty + W * 0.03, tx + i * W * 0.010, ty + W * 0.055 + rng() * W * 0.012);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = GOLD;
+    ctx.beginPath();
+    ctx.arc(tx, ty, W * 0.011, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 盘长结纹样：两层旋转方框交错 + 四角结耳（写意，非工笔） */
+  function knotMotif(ctx, cx, cy, s, color, lineW, alpha) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineW;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    for (const k of [1, 0.6]) {
+      const r = s * k;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    // 四角结耳：绳绕出来的小环
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * s * 1.02, Math.sin(a) * s * 1.02, s * 0.19, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function render(style, studio, size) {
     const W = size || 1024;
     const scene = buildScene(studio, W);
@@ -1692,8 +1933,8 @@
     if (!maskData.coverage) {
       // 空画布时仍输出一张空的工艺纸，供占位
       paperBase(ctx, W, PAPER, rng);
-      if (style === "tiedye" || style === "calico") {
-        ctx.fillStyle = style === "tiedye" ? "#2B4A6B" : "#27435F";
+      if (style === "tiedye" || style === "calico" || style === "cloisonne") {
+        ctx.fillStyle = style === "tiedye" ? "#2B4A6B" : style === "cloisonne" ? "#12305C" : "#27435F";
         ctx.fillRect(0, 0, W, W);
       }
     }
@@ -1704,6 +1945,8 @@
     else if (style === "bamboo") drawBamboo(ctx, W, maskData, rng);
     else if (style === "shadow") drawShadow(ctx, W, maskData, rng);
     else if (style === "embroidery") drawEmbroidery(ctx, W, maskData, rng);
+    else if (style === "cloisonne") drawCloisonne(ctx, W, maskData, rng);
+    else if (style === "knot") drawKnot(ctx, W, maskData, rng);
     else drawPapercut(ctx, W, maskData, rng);
 
     return out;

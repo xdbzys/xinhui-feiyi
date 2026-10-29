@@ -1287,6 +1287,10 @@ a { color: inherit; }
 .swatch-bamboo { background: repeating-linear-gradient(0deg, #c9a96a 0 3px, #a8844e 3px 6px), repeating-linear-gradient(90deg, transparent 0 5px, rgba(80, 62, 35, 0.28) 5px 6px); }
 .swatch-shadow { background: radial-gradient(circle at 50% 40%, #e8c88a 0 12%, #c97b4a 40%, #7a2e1e 85%); }
 .swatch-embroidery { background: linear-gradient(135deg, #e0a8b0 0%, #b23a48 50%, #6b8fa8 100%); }
+/* 掐丝珐琅：深蓝釉底 + 金丝勾边 */
+.swatch-cloisonne { background: radial-gradient(circle at 34% 30%, #43a6bc 0 18%, #1b4a82 55%, #0e2748 92%), linear-gradient(90deg, transparent 0 46%, rgba(201,162,39,0.55) 46% 54%, transparent 54%); }
+/* 绳结：正红绳身 + 斜向捻纹 */
+.swatch-knot { background: repeating-linear-gradient(45deg, #e2846f 0 2px, #b02a22 2px 6px); }
 
 .craft-view-switch {
   display: flex;

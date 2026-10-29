@@ -684,7 +684,10 @@
     $("#aiCraftEmpty").hidden = has;
     $("#aiArtMeta").hidden = !has;
     $("#aiArtDownload").hidden = !has;
-    $("#downloadPattern").hidden = !has;
+    // 图样下载不依赖 AI：始终可用。没有 AI 二创稿时导出本地工艺图样。
+    const dl = $("#downloadPattern");
+    dl.hidden = false;
+    dl.textContent = has ? "下载打印级图样 · 2048px" : "下载本地工艺图样 · 2048px";
     applyMockup(url || "");
   }
 
@@ -923,25 +926,90 @@
     $("#toGuide").addEventListener("click", () => scrollToEl("#step4"));
   }
 
-  async function downloadPattern() {
-    if (!state.aiImageURL) {
-      toast("先生成 AI 二创稿，再下载");
-      scrollToEl("#step3");
-      return;
-    }
-    const meta = window.XHFYCraft.META[state.aiBaseStyle || state.craftStyle];
+  /* ---------------- 图样导出（打印级） ---------------- */
+
+  // 印制实物（帆布袋 / 剪纸底稿 / 掐丝珐琅描稿）需要更大的像素，1024 只够屏幕看
+  const PRINT_SIZE = 2048;
+
+  function triggerDownload(href, filename, openInNewTab) {
     const a = document.createElement("a");
-    a.href = state.aiImageURL;
-    a.download = "心绘非遗_AI二创_" + meta.short + ".png";
-    if (!state.aiComposed) {
-      // 底图源站不带 CORS 头，无法合成时只能打开原图另存
+    a.href = href;
+    a.download = filename;
+    if (openInNewTab) {
       a.target = "_blank";
       a.rel = "noopener";
     }
     document.body.appendChild(a);
     a.click();
     a.remove();
-    toast(state.aiComposed ? "AI 二创稿已下载" : "已打开纹样原图，可右键保存", 3200);
+  }
+
+  /**
+   * 本地工艺图样：完全不依赖 AI。
+   * 策划书把「一键下载非遗图样」列为硬要求——AI 额度耗尽或断网时也必须拿得到成品，
+   * 所以这里直接用本地转译引擎渲染：笔迹骨架与各工艺纹样都在，且是原分辨率渲染不是放大。
+   */
+  function localPatternURL(size) {
+    const s = size || PRINT_SIZE;
+    const style = state.aiBaseStyle || state.craftStyle || "papercut";
+    const cv = window.XHFYCraft.render(style, studio, s);
+    return cv.toDataURL("image/png");
+  }
+
+  /** 把已合成的成品放大到打印尺寸，满足送印的像素要求 */
+  function upscaleDataURL(dataURL, target) {
+    return loadImage(dataURL).then((img) => {
+      const cv = mkCanvas(target);
+      const ctx = cv.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, target, target);
+      return cv.toDataURL("image/png");
+    });
+  }
+
+  /**
+   * 图样下载（三条路径，保证任何情况下都可用）：
+   * ① 有 AI 二创稿且已合成 → 放大到 2048px 导出；
+   * ② 有 AI 图但未合成（跨域取图失败）→ 打开原图另存；
+   * ③ 完全没有 AI 二创稿 → 用本地引擎渲染打印级图样。
+   */
+  async function downloadPattern() {
+    const meta = window.XHFYCraft.META[state.aiBaseStyle || state.craftStyle] || window.XHFYCraft.META.papercut;
+    if (!studio) {
+      toast("先画一幅画，再下载图样");
+      scrollToEl("#step1");
+      return;
+    }
+
+    if (state.aiImageURL && state.aiComposed) {
+      try {
+        const url = await upscaleDataURL(state.aiImageURL, PRINT_SIZE);
+        triggerDownload(url, "心绘非遗_AI二创_" + meta.short + "_" + PRINT_SIZE + ".png");
+        toast("AI 二创稿已下载（" + PRINT_SIZE + "px，可直接送印）", 3200);
+      } catch (e) {
+        console.warn("[心绘非遗] 高清导出失败，回退 1024px", e && (e.message || e));
+        triggerDownload(state.aiImageURL, "心绘非遗_AI二创_" + meta.short + ".png");
+        toast("高清导出未完成，已下载 1024px 版本", 3000);
+      }
+      return;
+    }
+
+    if (state.aiImageURL) {
+      // 底图源站不带 CORS 头，无法合成时只能打开原图另存
+      triggerDownload(state.aiImageURL, "心绘非遗_AI二创_" + meta.short + ".png", true);
+      toast("已打开纹样原图，可右键保存", 3200);
+      return;
+    }
+
+    try {
+      const url = localPatternURL(PRINT_SIZE);
+      triggerDownload(url, "心绘非遗_图样_" + meta.short + "_" + PRINT_SIZE + ".png");
+      toast("已下载打印级图样（" + PRINT_SIZE + "px，可印帆布袋或作剪纸底稿）", 3600);
+    } catch (e) {
+      console.warn("[心绘非遗] 本地图样导出失败", e && (e.message || e));
+      toast("图样导出失败，请重试", 3000);
+    }
   }
 
   /* ---------------- 手作指南 ---------------- */

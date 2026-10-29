@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=d7c4a18">
+<link rel="stylesheet" href="assets/css/style.css?v=e8b5f27">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -77,7 +77,7 @@
         </div>
         <ul class="hero-meta">
           <li><strong>4</strong><span>步疗愈闭环</span></li>
-          <li><strong>6</strong><span>种非遗工艺</span></li>
+          <li><strong>8</strong><span>种非遗工艺</span></li>
           <li><strong>0</strong><span>绘画门槛</span></li>
         </ul>
       </div>
@@ -349,6 +349,12 @@
           <button class="craft-tab" data-style="embroidery" role="tab" aria-selected="false">
             <i class="swatch swatch-embroidery"></i><strong>刺绣</strong><em>丝理针脚</em>
           </button>
+          <button class="craft-tab" data-style="cloisonne" role="tab" aria-selected="false">
+            <i class="swatch swatch-cloisonne"></i><strong>掐丝珐琅</strong><em>铜丝填釉</em>
+          </button>
+          <button class="craft-tab" data-style="knot" role="tab" aria-selected="false">
+            <i class="swatch swatch-knot"></i><strong>绳结</strong><em>盘长同心</em>
+          </button>
         </div>
 
         <div class="craft-stage">
@@ -374,7 +380,7 @@
             <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
             <div class="craft-actions">
               <button id="aiRedraw" class="btn btn-primary" type="button"><span>AI 二创当前工艺</span><i>✦</i></button>
-              <button id="downloadPattern" class="btn btn-ghost" type="button" hidden>下载 AI 二创稿</button>
+              <button id="downloadPattern" class="btn btn-ghost" type="button">下载打印级图样 · 2048px</button>
             </div>
             <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出 AI 读到的意象与工艺：它把你的线条当作主骨架，用祥云纹、缠枝纹、回字纹填满空白，再以该工艺的材质与光影成画。</p>
             <div class="ai-art-meta" id="aiArtMeta" hidden>
@@ -483,7 +489,7 @@
     </div>
     <div class="footer-meta">
       <p>AI 视觉：智谱 GLM-4V / GLM-4 / CogView</p>
-      <p>非遗工艺：剪纸 · 扎染 · 蓝印花布 · 竹编</p>
+      <p>非遗工艺：剪纸 · 扎染 · 蓝印花布 · 竹编 · 皮影 · 刺绣 · 掐丝珐琅 · 绳结</p>
     </div>
     <p class="footer-note">本项目为大学生创新竞赛概念验证作品。心理分析仅供自我觉察，不替代专业心理咨询。</p>
   </div>
@@ -626,13 +632,13 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=d7c4a18"></script>
-<script src="assets/js/paint.js?v=d7c4a18"></script>
-<script src="assets/js/analyze.js?v=d7c4a18"></script>
-<script src="assets/js/craft.js?v=d7c4a18"></script>
-<script src="assets/js/knowledge.js?v=d7c4a18"></script>
-<script src="assets/js/ai.js?v=d7c4a18"></script>
-<script src="assets/js/report.js?v=d7c4a18"></script>
-<script src="assets/js/app.js?v=d7c4a18"></script>
+<script src="assets/js/config.js?v=e8b5f27"></script>
+<script src="assets/js/paint.js?v=e8b5f27"></script>
+<script src="assets/js/analyze.js?v=e8b5f27"></script>
+<script src="assets/js/craft.js?v=e8b5f27"></script>
+<script src="assets/js/knowledge.js?v=e8b5f27"></script>
+<script src="assets/js/ai.js?v=e8b5f27"></script>
+<script src="assets/js/report.js?v=e8b5f27"></script>
+<script src="assets/js/app.js?v=e8b5f27"></script>
 </body>
 </html>
