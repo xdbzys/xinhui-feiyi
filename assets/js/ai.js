@@ -676,11 +676,15 @@
     const layout = (v.layout || "").slice(0, 22);
     const mood = (v.mood || "").slice(0, 10);
 
-    let prompt = "中国" + b.name + "：" + p.imagery + "，" + b.material + "，" + b.accent;
-    if (palette) prompt += "，主色" + palette;
-    if (mood) prompt += "，" + mood;
-    if (layout) prompt += "，构图" + layout;
-    prompt += "，大面积留白，无文字";
+    const userIntent = (document.getElementById("craftIntentInput") || {}).value || "";
+    const userMeaning = ((document.getElementById("craftMeaningSelect") || {}).value || "由我自己定义");
+    let prompt = "中国传统" + b.name + "纹样设计，严格保留用户原画主体与构图：" + p.imagery + "，" + b.material + "，" + b.accent;
+    if (userIntent) prompt += "，用户指定必须保留：" + userIntent.slice(0, 100);
+    if (userMeaning) prompt += "，用户确认的感受主题：" + userMeaning;
+    if (palette) prompt += "，参考原画主色" + palette;
+    if (mood) prompt += "，氛围" + mood;
+    if (layout) prompt += "，原画空间位置" + layout;
+    prompt += "，主体数量、轮廓、方向和相对位置不变；不得新增、替换或删减主体；传统纹样只作边饰；无文字。";
 
     return {
       title: (report && (report.archetype || report.title)) || "心象纹样",
