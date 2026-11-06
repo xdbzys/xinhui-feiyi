@@ -490,7 +490,7 @@
         process: "80-130字过程印记，引用作画时长/停顿/撤销/换色/笔速中至少三项",
         mood: "50-80字当下心情，用也许/像是，并标注把握度",
         regulation: { id: "从 " + regIds + " 选最贴合证据的一个", why: "40-60字说明这个调节方法与哪些证据匹配" },
-        craft: { style: "papercut/tiedye/calico/bamboo 选一个", reason: "40-70字说明为何此工艺贴合画面结构", elements: "30-50字说明画面哪些元素如何转译为纹样" },
+        craft: { style: "固定填 papercut（本版只启用剪纸一种工艺）", reason: "40-70字说明为何剪纸的红纸镂空贴合画面结构", elements: "30-50字说明画面哪些元素如何转译为剪纸纹样" },
         guide: { intro: "30-50字", materials: ["4-6项"], steps: [{ title: "4-8字", text: "30-50字含正念呼吸" }], mantra: "20-35字正念引导语" }
       })
     ].join("\n");
@@ -563,22 +563,15 @@
     "你只输出合法 JSON，中文，无 markdown，不解释。"
   ].join("");
 
-  // 各工艺的材质与纹样关键词
+  // 剪纸工艺的材质与纹样关键词（本版只启用一种工艺）
   /**
    * 图像模型的提示词必须短。
    * 实测 CogView-3-Flash 对长段多义描述会失焦——把「骨架/关节/镂雕/千丝万缕」
    * 堆在一起时曾生成过建筑照片与人像；改成「工艺＋一个具象意象＋两条材质关键词」
-   * 后，六种工艺都能稳定产出可用的非遗画面。控制在 40–70 字。
+   * 后，剪纸能稳定产出可用的红纸镂空画面。控制在 40–70 字。
    */
   const CRAFT_BRIEF = {
-    papercut: { name: "剪纸", material: "红纸镂空剪影，刀口利落", accent: "祥云纹镂空" },
-    tiedye: { name: "扎染", material: "靛蓝棉布晕染，冰裂纹", accent: "同心晕圈" },
-    calico: { name: "蓝印花布", material: "靛蓝底白花，刻版防染", accent: "缠枝纹" },
-    bamboo: { name: "竹编", material: "竹篾经纬交织", accent: "竹节纹" },
-    shadow: { name: "皮影", material: "牛皮镂雕剪影，侧身关节，暖黄透光", accent: "祥云纹镂空" },
-    embroidery: { name: "苏绣", material: "绸缎底缎绣针脚，丝线光泽", accent: "打籽点缀" },
-    cloisonne: { name: "掐丝珐琅", material: "景泰蓝铜丝掐丝填釉，釉面玻璃光泽", accent: "鎏金回字边" },
-    knot: { name: "绳结", material: "正红棉绳盘长结，一线到底", accent: "结耳与流苏" }
+    papercut: { name: "剪纸", material: "红纸镂空剪影，刀口利落", accent: "祥云纹镂空" }
   };
 
   /** 本地兜底：按线条特征联想一个具象意象 */
@@ -653,9 +646,8 @@
       "一撇一捺可能是冲破束缚的翅膀，可化作展翅的纸鸢。",
       "必须给出具象的自然或人文意象（飞天、瑞兽、游鱼、兰花、水波纹、纸鸢、仙鹤、螭龙、云气、莲、牡丹之类），",
       "绝不能只描述线条本身。",
-      "工艺匹配：线条狂放断裂→皮影；细腻长短错落→苏绣；交错复杂→竹编；首尾相连成环→绳结；",
-      "闭合且色块分明→掐丝珐琅；大面积留白气韵生动→扎染或剪纸。",
-      "当前工艺：" + (meta.short || style) + "。若更契合别的工艺，在 craftNote 说明，但仍按当前工艺输出。",
+      "唯一工艺：" + (meta.short || "剪纸") + "（红纸镂空、刀口利落，以锯齿纹与云纹收边）。",
+      "请把意象想成一张能真正剪出来的红纸：轮廓连贯、镂空可透光、细碎笔触收拢成连续刀路。",
       "",
       // 三层融合硬约束：内容 / 文化 / 工艺（《方案.docx》），
       // 可用纹样与出处只取自纹样溯源知识库（《剪纸.pdf》），模型不得杜撰。
@@ -673,7 +665,7 @@
       "- 布局：" + (v.layout || "无") + "；元素：" + ((v.elements || []).join("、") || "无"),
       "- 心象图鉴：" + ((report && (report.archetype || report.title)) || "未命名"),
       "",
-      '只输出 JSON：{"imagery":"≤12字具象意象，如：盘踞的螭龙","imageryWhy":"≤40字：为什么这几笔让你想到它","motifWeave":"≤50字：选祥云纹/缠枝纹/回字纹/水波纹等具体纹样，说明怎样填补线条之间的空白","craftNote":"≤40字：为何此工艺最契合，或更契合的工艺"}'
+      '只输出 JSON：{"imagery":"≤12字具象意象，如：盘踞的螭龙","imageryWhy":"≤40字：为什么这几笔让你想到它","motifWeave":"≤50字：选祥云纹/缠枝纹/回字纹/锯齿纹等具体剪纸纹样，说明怎样填补线条之间的空白","craftNote":"≤40字：这张剪纸如何接住画里的情绪"}'
     ].join("\n");
 
     try {
@@ -724,7 +716,7 @@
 
     const anchorSource = (v.anchors && v.anchors.length) ? v.anchors : (H ? H.anchorsOf(v.elements) : []);
     const anchors = anchorSource.slice(0, 2);
-    // 只取有明确文献转译表的纹样名；其余工艺使用项目语法，不塞长描述
+    // 只取有明确文献转译表的剪纸纹样名；无规则的元素走项目语法，不塞长描述
     const ruleMotifs = H ? H.translateElements(v.elements, style)
       .filter((t) => t.fromRule).slice(0, 2).map((t) => t.motif) : [];
     const emotion = String(a.emotionTheme || "").slice(0, 8);

@@ -581,12 +581,20 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   padding: 13px 20px;
   font-size: 10px;
   letter-spacing: 0.22em;
   color: var(--ink-mute);
   border-bottom: 1px solid var(--line);
   background: rgba(239, 229, 212, 0.34);
+}
+.canvas-head-right {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
 }
 .live-dot { display: inline-flex; align-items: center; gap: 8px; }
 .live-dot i {
@@ -596,8 +604,107 @@ a { color: inherit; }
   animation: livePulse 2s infinite;
 }
 
+/* ── 画布缩放 ──────────────────────────────────────────────────
+   视口保持原始 3:2 的显示高度，画板按 zoom 调整宽度后在其中滚动。
+   canvas 内部坐标恒为 960×640，paint.js 以 getBoundingClientRect()
+   做归一化换算，因此放大只改变显示尺寸，已落的笔迹不会错位。 */
+.zoom-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--paper-light);
+  letter-spacing: 0;
+}
+.zoom-ctrl button {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+.zoom-ctrl button:hover:not(:disabled) { background: rgba(30, 28, 25, 0.07); }
+.zoom-ctrl button:disabled { opacity: 0.32; cursor: not-allowed; }
+.zoom-ctrl .zoom-reset {
+  min-width: auto;
+  padding: 0 9px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  border-left: 1px solid var(--line);
+}
+#zoomLabel {
+  min-width: 44px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-viewport {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  min-height: 280px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgba(226, 214, 192, 0.34);
+  scrollbar-width: thin;
+}
+.canvas-viewport::-webkit-scrollbar { width: 9px; height: 9px; }
+.canvas-viewport::-webkit-scrollbar-track { background: transparent; }
+.canvas-viewport::-webkit-scrollbar-thumb {
+  background: rgba(30, 28, 25, 0.22);
+  border-radius: 6px;
+}
+
+.canvas-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--line);
+  background: rgba(239, 229, 212, 0.3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+.canvas-foot[hidden] { display: none; }
+.canvas-foot button {
+  padding: 5px 11px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+  background: var(--paper-light);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+.canvas-foot button:hover { border-color: var(--red); color: var(--red); }
+.canvas-foot button.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper-light);
+}
+
+/* 抓手模式：暂时关掉绘制，让指针 / 手指用来平移放大的画布 */
+.canvas-viewport.pan-mode { cursor: grab; }
+.canvas-viewport.pan-mode:active { cursor: grabbing; }
+.canvas-viewport.pan-mode .canvas-wrap { touch-action: pan-x pan-y; cursor: grab; }
+.canvas-viewport.pan-mode #paintCanvas { pointer-events: none; }
+
 .canvas-wrap {
   position: relative;
+  width: 100%;
+  margin: 0 auto;
   aspect-ratio: 3 / 2;
   background-color: #fbf7ec;
   background-image:
@@ -1239,6 +1346,10 @@ a { color: inherit; }
   border-bottom: 0;
   background: rgba(252, 249, 242, 0.6);
 }
+/* 单一工艺版：一条确认条，不再是可切换的多页签 */
+.craft-tabs.craft-tabs-single { grid-template-columns: 1fr; }
+.craft-tabs-single .craft-tab { cursor: default; }
+.craft-tabs-single .craft-tab em { letter-spacing: 0.1em; }
 .craft-tab {
   position: relative;
   display: grid;
@@ -1282,15 +1393,6 @@ a { color: inherit; }
   border: 1px solid rgba(30, 28, 25, 0.12);
 }
 .swatch-papercut { background: radial-gradient(circle at 30% 30%, #c85945, #962f22 70%); }
-.swatch-tiedye { background: radial-gradient(circle at 38% 32%, #7fa1b8 0 10%, #2b4a6b 45%, #16293d 90%); }
-.swatch-calico { background: repeating-linear-gradient(45deg, #2b4a6b 0 4px, #22405e 4px 8px), radial-gradient(circle at 60% 40%, #f7f2e8 0 6%, transparent 7%); background-blend-mode: lighten; }
-.swatch-bamboo { background: repeating-linear-gradient(0deg, #c9a96a 0 3px, #a8844e 3px 6px), repeating-linear-gradient(90deg, transparent 0 5px, rgba(80, 62, 35, 0.28) 5px 6px); }
-.swatch-shadow { background: radial-gradient(circle at 50% 40%, #e8c88a 0 12%, #c97b4a 40%, #7a2e1e 85%); }
-.swatch-embroidery { background: linear-gradient(135deg, #e0a8b0 0%, #b23a48 50%, #6b8fa8 100%); }
-/* 掐丝珐琅：深蓝釉底 + 金丝勾边 */
-.swatch-cloisonne { background: radial-gradient(circle at 34% 30%, #43a6bc 0 18%, #1b4a82 55%, #0e2748 92%), linear-gradient(90deg, transparent 0 46%, rgba(201,162,39,0.55) 46% 54%, transparent 54%); }
-/* 绳结：正红绳身 + 斜向捻纹 */
-.swatch-knot { background: repeating-linear-gradient(45deg, #e2846f 0 2px, #b02a22 2px 6px); }
 
 .craft-view-switch {
   display: flex;
@@ -2252,9 +2354,8 @@ a { color: inherit; }
   .dimension-grid { grid-template-columns: repeat(2, 1fr); }
   .insight-grid { grid-template-columns: 1fr; }
   .language-grid { grid-template-columns: 1fr; gap: 26px; }
-  .craft-tabs { grid-template-columns: repeat(2, 1fr); }
-  .craft-tab:nth-child(2) { border-right: 0; }
-  .craft-tab:nth-child(1), .craft-tab:nth-child(2) { border-bottom: 1px solid var(--line); }
+  .craft-tabs, .craft-tabs.craft-tabs-single { grid-template-columns: 1fr; }
+  .craft-tab { border-right: 0; }
   .craft-stage, .guide-shell { padding: 26px; }
   .report-paper { padding: 44px 34px 40px; }
   .report-overview { grid-template-columns: 1fr; gap: 22px; }
@@ -2279,7 +2380,11 @@ a { color: inherit; }
   .tool-group.tools { border-right: 0; padding-right: 0; }
   .tool-group.history { margin-left: 0; }
   .dimension-grid { grid-template-columns: 1fr; }
-  .craft-tabs { grid-template-columns: 1fr 1fr; }
+  .craft-tabs, .craft-tabs.craft-tabs-single { grid-template-columns: 1fr; }
+  .canvas-head { padding: 10px 12px; }
+  .canvas-head-right { gap: 8px 12px; }
+  .canvas-foot { padding: 8px 12px; }
+  .canvas-viewport { min-height: 240px; }
   .craft-stage { padding: 18px; gap: 24px; }
   .craft-view-switch { width: 100%; }
   .craft-view-switch button { flex: 1; padding: 9px 10px; }

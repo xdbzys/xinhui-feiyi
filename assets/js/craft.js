@@ -1,7 +1,11 @@
 /* =========================================================
-   心绘非遗 · 非遗纹样转译引擎
-   把用户笔触实时转译成：剪纸 / 扎染 / 蓝印花布 / 竹编
+   心绘非遗 · 剪纸纹样转译引擎（单一工艺版）
+   把用户笔触实时转译成一张可剪的红纸镂空图样
    全部为 Canvas 程序化生成，可导出 2048px 打印图样
+
+   说明：本版只启用「剪纸」。下方其余工艺的绘制函数作为历史实现保留，
+   但 render() 不再派发到它们；META 也只包含 papercut 一项。
+   保留它们而非整段删除，是为了不误伤共用的取形 / 遮罩 / 装裱管线。
    ========================================================= */
 (function () {
   "use strict";
@@ -19,76 +23,6 @@
       use: "剪纸 / 窗花 / 帆布袋印花",
       note: "小提示：红色越深，剪影越完整；细碎的笔触会被收拢成连续的刀路。",
       palette: ["#A63A2B", "#C46753", "#F4EBDD"]
-    },
-    tiedye: {
-      name: "非遗扎染 · 靛蓝晕染",
-      badge: "非遗扎染",
-      short: "扎染",
-      desc: "把你的画面放进一口靛蓝染缸。笔触成为被扎结的「resist」，在冰裂纹与晕圈之间，留下不可复制的蓝。",
-      grammar: "扎结 · 晕染 · 冰裂纹 · 同心圆",
-      use: "扎染方巾 / 帆布袋 / 棉麻挂布",
-      note: "小提示：扎染没有两块完全相同的布。你画得越松弛，晕开的层次越好看。",
-      palette: ["#16293D", "#2B4A6B", "#7FA1B8"]
-    },
-    calico: {
-      name: "非遗蓝印花布 · 白花靛底",
-      badge: "蓝印花布",
-      short: "蓝印花布",
-      desc: "以靛蓝为底、石灰防染为白，把你的心象变成一块白花蓝布。细密的冰裂纹，是手工防染留下的呼吸。",
-      grammar: "靛底 · 白花 · 防染 · 冰裂纹",
-      use: "蓝印花布 / 桌旗 / 手作包",
-      note: "小提示：白色纹样越完整，越接近传统刻版防染的效果。",
-      palette: ["#26425F", "#41647F", "#F4EFE1"]
-    },
-    bamboo: {
-      name: "非遗竹编 · 经纬交织",
-      badge: "非遗竹编",
-      short: "竹编",
-      desc: "把你的线条拆成竹篾，横向为纬、纵向为经，一压一挑地重新编织。心绪在重复的经纬里，慢慢有了秩序。",
-      grammar: "经纬 · 一压一挑 · 竹篾 · 收边",
-      use: "竹编画 / 杯垫 / 灯罩底稿",
-      note: "小提示：深色笔触会成为竹编里的阴面，浅色则像被光穿透的竹篾。",
-      palette: ["#C9A96A", "#8C6E3F", "#4A3B26"]
-    },
-    shadow: {
-      name: "非遗皮影 · 镂雕皮影",
-      badge: "非遗皮影",
-      short: "皮影",
-      desc: "把你的线条镂刻成一张皮影。关节处留一道细线，让剪影有了可以活动的生命，在暖光里投出灵动的影子。",
-      grammar: "剪影 · 关节线 · 镂雕 · 暖光透影",
-      use: "皮影戏底稿 / 装饰画 / 灯箱片",
-      note: "小提示：皮影靠光活着。画里的每一道开口，都是光透过来的地方。",
-      palette: ["#8B3A2A", "#C97B4A", "#E8C88A"]
-    },
-    embroidery: {
-      name: "非遗刺绣 · 丝理针脚",
-      badge: "非遗刺绣",
-      short: "刺绣",
-      desc: "把你的笔触化成丝线。一针一线地走，缎面铺满、打籽点缀，让心象在绸缎上有了丝绒的温度与光泽。",
-      grammar: "缎绣 · 打籽 · 套针 · 丝理",
-      use: "刺绣画稿 / 团扇 / 服饰纹样",
-      note: "小提示：刺绣最讲究「丝理」——线条的方向就是丝线的走向，顺着它绣才会发亮。",
-      palette: ["#B23A48", "#E0A8B0", "#6B8FA8"]
-    },
-    cloisonne: {
-      name: "非遗掐丝珐琅 · 铜丝填釉",
-      badge: "掐丝珐琅",
-      short: "掐丝珐琅",
-      desc: "先用铜丝沿着你的笔迹「掐」出轮廓，再一格一格填进青蓝釉料、点蓝烧蓝。心象被烧制成一件景泰蓝：坚硬、温润，而且不会褪色。",
-      grammar: "掐丝 · 点蓝 · 烧蓝 · 鎏金",
-      use: "掐丝珐琅画 / 书签 / 冰箱贴底稿",
-      note: "小提示：掐丝珐琅讲究「丝断意连」——线条断开的地方，釉色会替你接上。",
-      palette: ["#1B4A82", "#3FA0B8", "#C9A227"]
-    },
-    knot: {
-      name: "非遗绳结 · 盘长同心",
-      badge: "非遗绳结",
-      short: "绳结",
-      desc: "把你的笔迹搓成一根红绳，一穿一绕地打成盘长结。绳没有头也没有尾，像那些一直在你心里循环、却也一直护着你的念头。",
-      grammar: "盘长 · 穿绕 · 结耳 · 流苏",
-      use: "中国结挂饰 / 车挂 / 手绳底稿",
-      note: "小提示：绳结讲究「一线到底」。你画得越连贯，编出来的结越圆润完整。",
-      palette: ["#B02A22", "#E0705F", "#F2C14E"]
     }
   };
 
@@ -1928,26 +1862,16 @@
     out.width = W;
     out.height = W;
     const ctx = out.getContext("2d");
-    const rng = mulberry32(20261024 + style.length * 977);
+    const rng = mulberry32(20261024);
 
     if (!maskData.coverage) {
-      // 空画布时仍输出一张空的工艺纸，供占位
+      // 空画布时仍输出一张空的剪纸红纸，供占位
       paperBase(ctx, W, PAPER, rng);
-      if (style === "tiedye" || style === "calico" || style === "cloisonne") {
-        ctx.fillStyle = style === "tiedye" ? "#2B4A6B" : style === "cloisonne" ? "#12305C" : "#27435F";
-        ctx.fillRect(0, 0, W, W);
-      }
     }
 
-    if (style === "papercut") drawPapercut(ctx, W, maskData, rng);
-    else if (style === "tiedye") drawTiedye(ctx, W, maskData, rng);
-    else if (style === "calico") drawCalico(ctx, W, maskData, rng);
-    else if (style === "bamboo") drawBamboo(ctx, W, maskData, rng);
-    else if (style === "shadow") drawShadow(ctx, W, maskData, rng);
-    else if (style === "embroidery") drawEmbroidery(ctx, W, maskData, rng);
-    else if (style === "cloisonne") drawCloisonne(ctx, W, maskData, rng);
-    else if (style === "knot") drawKnot(ctx, W, maskData, rng);
-    else drawPapercut(ctx, W, maskData, rng);
+    // 单一工艺版：无论传入什么 style，都只走剪纸渲染。
+    // 其余绘制函数为历史实现，保留但不派发。
+    drawPapercut(ctx, W, maskData, rng);
 
     return out;
   }

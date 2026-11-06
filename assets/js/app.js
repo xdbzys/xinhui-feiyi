@@ -18,8 +18,8 @@
     aiBaseStyle: "",
     aiComposed: false,
     aiBlueprint: null,
-    // 已生成过的二创稿按工艺缓存：切换工艺再切回来直接复用，
-    // 不再重复调用图像模型（图像按张计费/占免费额度，是全流程最贵的一步）。
+    // 已生成过的二创稿按工艺缓存，避免重复出图——图像按张计费 / 占免费额度，
+    // 是全流程最贵的一步。单一工艺版仍保留这层缓存，供后续扩回多工艺时复用。
     craftCache: {},
     // 情绪意象由用户本人确认（AI 只给可能性，不替用户定义感受）
     emotionTheme: "",
@@ -209,6 +209,141 @@
     setInterval(() => maybeCompanion(false), 4000);
   }
 
+  /* ---------------- 画布缩放与平移 ---------------- */
+
+  /**
+   * 画布显示的放大 / 缩小。
+   * 关键约束：paint.js 的 _pos() 用 canvas.getBoundingClientRect() 把指针
+   * 坐标归一化到内部 960×640 坐标系，所以这里只改「画板」的 CSS 宽度，
+   * 绝不触碰 canvas.width / height；已落的笔迹在任意比例下都不会错位。
+   */
+  const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
+  function initCanvasZoom() {
+    const vp = $("#canvasViewport");
+    const wrap = $("#canvasWrap");
+    const label = $("#zoomLabel");
+    const foot = $("#canvasFoot");
+    const hint = $("#zoomHint");
+    const panBtn = $("#panBtn");
+    const inBtn = $("#zoomInBtn");
+    const outBtn = $("#zoomOutBtn");
+    const resetBtn = $("#zoomResetBtn");
+    if (!vp || !wrap || !label) return;
+
+    let zoomIndex = 2;               // 默认 100%
+    let zoom = 1;
+    let panPinned = false;           // 「抓手」按钮锁定的平移模式
+    let spaceHeld = false;           // 按住空格临时平移
+    let panDrag = null;
+
+    const isTyping = (t) => !!t && (
+      t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable
+    );
+
+    function syncPan() {
+      const on = panPinned || spaceHeld;
+      vp.classList.toggle("pan-mode", on);
+      panBtn.classList.toggle("active", panPinned);
+      panBtn.setAttribute("aria-pressed", panPinned ? "true" : "false");
+      panBtn.textContent = panPinned ? "抓手 · 点击结束平移" : "抓手 · 拖动画布";
+      if (!on) panDrag = null;
+    }
+
+    function renderZoom() {
+      const prev = zoom;
+      zoom = ZOOM_STEPS[zoomIndex];
+      wrap.style.width = (zoom * 100) + "%";
+      label.textContent = Math.round(zoom * 100) + "%";
+      outBtn.disabled = zoomIndex === 0;
+      inBtn.disabled = zoomIndex === ZOOM_STEPS.length - 1;
+      resetBtn.disabled = zoom === 1;
+
+      foot.hidden = zoom === 1;
+      if (zoom > 1) {
+        hint.textContent = "已放大到 " + Math.round(zoom * 100) + "%：按住空格或点「抓手」拖动，滚轮 / 滚动条也能移动；笔迹不会变形。";
+      } else if (zoom < 1) {
+        hint.textContent = "已缩小到 " + Math.round(zoom * 100) + "%：点「复位」回到原始大小。";
+      } else {
+        panPinned = false;
+        syncPan();
+      }
+
+      // 以视口中心为锚点缩放：放大后仍停在刚才看的位置，而不是跳回左上角
+      if (prev !== zoom && zoom > 1) {
+        const cx = (vp.scrollLeft + vp.clientWidth / 2) / prev;
+        const cy = (vp.scrollTop + vp.clientHeight / 2) / prev;
+        vp.scrollLeft = cx * zoom - vp.clientWidth / 2;
+        vp.scrollTop = cy * zoom - vp.clientHeight / 2;
+      }
+      if (zoom === 1) { vp.scrollLeft = 0; vp.scrollTop = 0; }
+    }
+
+    function stepZoom(delta) {
+      const next = Math.max(0, Math.min(ZOOM_STEPS.length - 1, zoomIndex + delta));
+      if (next === zoomIndex) return;
+      zoomIndex = next;
+      renderZoom();
+    }
+    function resetZoom() {
+      if (zoomIndex === 2) return;
+      zoomIndex = 2;
+      renderZoom();
+    }
+
+    inBtn.addEventListener("click", () => stepZoom(1));
+    outBtn.addEventListener("click", () => stepZoom(-1));
+    resetBtn.addEventListener("click", resetZoom);
+    panBtn.addEventListener("click", () => { panPinned = !panPinned; syncPan(); });
+
+    // 桌面鼠标：抓手模式下按住拖动即平移，无需去够滚动条
+    vp.addEventListener("pointerdown", (e) => {
+      if (!(panPinned || spaceHeld) || e.pointerType === "touch" || e.button !== 0) return;
+      panDrag = { x: e.clientX, y: e.clientY, sl: vp.scrollLeft, st: vp.scrollTop };
+      if (vp.setPointerCapture) vp.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    vp.addEventListener("pointermove", (e) => {
+      if (!panDrag) return;
+      vp.scrollLeft = panDrag.sl - (e.clientX - panDrag.x);
+      vp.scrollTop = panDrag.st - (e.clientY - panDrag.y);
+    });
+    const endDrag = () => { panDrag = null; };
+    vp.addEventListener("pointerup", endDrag);
+    vp.addEventListener("pointercancel", endDrag);
+    vp.addEventListener("pointerleave", endDrag);
+
+    // Ctrl / ⌘ + 滚轮缩放；普通滚轮仍照常滚动放大的画布
+    vp.addEventListener("wheel", (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      stepZoom(e.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
+
+    // 空格只在非 100% 时接管，避免影响整页滚动；所有快捷键都避开文字输入
+    document.addEventListener("keydown", (e) => {
+      if (isTyping(e.target)) return;
+      if (e.code === "Space" && zoom !== 1) {
+        e.preventDefault();
+        if (!spaceHeld) { spaceHeld = true; syncPan(); }
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "+" || e.key === "=") { e.preventDefault(); stepZoom(1); }
+      else if (e.key === "-" || e.key === "_") { e.preventDefault(); stepZoom(-1); }
+      else if (e.key === "0") { e.preventDefault(); resetZoom(); }
+    });
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Space" && spaceHeld) { spaceHeld = false; syncPan(); }
+    });
+    window.addEventListener("blur", () => {
+      if (spaceHeld) { spaceHeld = false; syncPan(); }
+    });
+
+    renderZoom();
+    syncPan();
+  }
+
   /* ---------------- 画笔 ---------------- */
 
   function initPaint() {
@@ -317,6 +452,9 @@
         else studio.undo();
       }
     });
+
+    // 缩放控件放在画案标题栏；内部坐标换算仍由 paint.js 负责
+    initCanvasZoom();
   }
 
   /* ---------------- 分析流程 ---------------- */
@@ -394,7 +532,9 @@
     }
     out.regulations = localRegs.slice(0, 4);
     out.craft = Object.assign({}, fallback.craft, ai && ai.craft);
-    if (!window.XHFYCraft.META[out.craft.style]) out.craft.style = fallback.craft.style;
+    // 本版只启用剪纸：AI 若在 JSON 里写了别的工艺名，统一归一到 papercut，
+    // 否则下游 META[style] / GUIDES[style] 会 undefined，整条渲染链会断。
+    out.craft.style = "papercut";
     if (!out.craft.reason) out.craft.reason = fallback.craft.reason;
     if (!out.craft.elements) out.craft.elements = fallback.craft.elements;
     out.guide = Object.assign({}, fallback.guide, ai && ai.guide);
@@ -575,7 +715,7 @@
     $("#spaceNarrative").textContent = r.space;
 
     // 工艺信息
-    const meta = window.XHFYCraft.META[state.craftStyle];
+    const meta = window.XHFYCraft.META[state.craftStyle] || window.XHFYCraft.META.papercut;
     const craftElements = (v.elements && v.elements.length) ? v.elements.join("、") : "心象轮廓、主色";
     $("#craftElements").textContent = craftElements;
     $("#craftGrammar").textContent = meta.grammar;
@@ -836,7 +976,7 @@
   }
 
   function updateCraftInfo(style) {
-    const meta = window.XHFYCraft.META[style];
+    const meta = window.XHFYCraft.META[style] || window.XHFYCraft.META.papercut;
     $("#craftName").textContent = meta.name;
     $("#craftDesc").textContent = meta.desc;
     $("#craftBadge").textContent = meta.badge;
@@ -957,14 +1097,14 @@
   }
 
   /**
-   * 从缓存恢复某个工艺的二创稿。
+   * 从缓存恢复剪纸二创稿。
    * 命中就完全不碰网络——图像按张计费，这是全流程最贵的一步，
-   * 用户在几个工艺之间来回切换欣赏时不应该反复出图。
+   * 用户来回欣赏或重新进入时不应该反复出图。
    */
   function restoreAiArt(style) {
     const hit = style && state.craftCache[style];
     if (!hit) return false;
-    const meta = window.XHFYCraft.META[style] || {};
+    const meta = window.XHFYCraft.META[style] || window.XHFYCraft.META.papercut;
     const bp = hit.blueprint || {};
 
     state.aiImageURL = hit.imageURL;
@@ -1043,7 +1183,7 @@
     const loader = $("#craftLoading");
     const loaderText = loader.querySelector("span");
     const style = state.craftStyle;
-    const meta = window.XHFYCraft.META[style];
+    const meta = window.XHFYCraft.META[style] || window.XHFYCraft.META.papercut;
     loader.hidden = false;
 
     try {
@@ -1163,7 +1303,7 @@
 
   /* ---------------- 图样导出（打印级） ---------------- */
 
-  // 印制实物（帆布袋 / 剪纸底稿 / 掐丝珐琅描稿）需要更大的像素，1024 只够屏幕看
+  // 印制实物（帆布袋 / 红纸剪纸底稿）需要更大的像素，1024 只够屏幕看
   const PRINT_SIZE = 2048;
 
   function triggerDownload(href, filename, openInNewTab) {
@@ -1253,7 +1393,7 @@
     if (!state.report) return;
     const style = state.craftStyle;
     const guide = window.XHFYReport.makeGuide(style, state.report);
-    const meta = window.XHFYCraft.META[style];
+    const meta = window.XHFYCraft.META[style] || window.XHFYCraft.META.papercut;
 
     $("#guideCraft").textContent = meta.short;
     $("#guideTitle").textContent = "《心愈手作指南》· " + meta.short;
@@ -1295,7 +1435,7 @@
 
   function guideText() {
     if (!state.report) return "";
-    const meta = window.XHFYCraft.META[state.craftStyle];
+    const meta = window.XHFYCraft.META[state.craftStyle] || window.XHFYCraft.META.papercut;
     const g = window.XHFYReport.makeGuide(state.craftStyle, state.report);
     const lines = [];
     lines.push("心绘非遗 · 心愈手作指南");

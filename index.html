@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>心绘非遗 · 基于情绪意象转译的 AI 非遗共创与数字化表达平台</title>
-<meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，由你确认画里的情绪意象，再把视觉锚点转译成有出处的传统纹样，生成剪纸、扎染、蓝印花布等非遗图样与可亲手完成的心愈手作指南。">
+<meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，由你确认画里的情绪意象，再把视觉锚点转译成有出处的传统剪纸纹样，生成可放大绘制、可打印剪裁的非遗剪纸图样与心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=a4e8c19">
+<link rel="stylesheet" href="assets/css/style.css?v=b6d2f08">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -77,7 +77,7 @@
         </div>
         <ul class="hero-meta">
           <li><strong>4</strong><span>步疗愈闭环</span></li>
-          <li><strong>8</strong><span>种非遗工艺</span></li>
+          <li><strong>1</strong><span>门专注工艺 · 剪纸</span></li>
           <li><strong>0</strong><span>绘画门槛</span></li>
         </ul>
       </div>
@@ -145,27 +145,41 @@
         <div class="canvas-column reveal">
           <div class="canvas-frame">
             <div class="canvas-head">
-              <span>画案 · 960 × 640</span>
-              <span class="live-dot"><i></i>心象记录中</span>
-            </div>
-            <div class="canvas-wrap" id="canvasWrap">
-              <canvas id="paintCanvas" width="1920" height="1280" aria-label="绘画画布"></canvas>
-              <div class="canvas-empty" id="canvasEmpty">
-                <span class="empty-ring"></span>
-                <strong>落笔即心</strong>
-                <small>按住鼠标或手指，慢慢画</small>
+              <span class="canvas-title">画案 · 960 × 640</span>
+              <div class="canvas-head-right">
+                <div class="zoom-ctrl" id="zoomCtrl" role="group" aria-label="画布缩放">
+                  <button type="button" id="zoomOutBtn" title="缩小画布（−）" aria-label="缩小画布">−</button>
+                  <span id="zoomLabel" aria-live="polite">100%</span>
+                  <button type="button" id="zoomInBtn" title="放大画布（+）" aria-label="放大画布">+</button>
+                  <button type="button" id="zoomResetBtn" class="zoom-reset" title="恢复原始大小">复位</button>
+                </div>
+                <span class="live-dot"><i></i>心象记录中</span>
               </div>
-              <div class="companion" id="companion" hidden>
-                <span class="companion-dot" aria-hidden="true"></span>
-                <div class="companion-body">
-                  <p id="companionSay"></p>
-                  <div class="companion-actions">
-                    <button type="button" id="companionMore">换个提醒</button>
-                    <button type="button" id="companionClose" aria-label="收起提醒">✕</button>
+            </div>
+            <div class="canvas-viewport" id="canvasViewport">
+              <div class="canvas-wrap" id="canvasWrap">
+                <canvas id="paintCanvas" width="1920" height="1280" aria-label="绘画画布"></canvas>
+                <div class="canvas-empty" id="canvasEmpty">
+                  <span class="empty-ring"></span>
+                  <strong>落笔即心</strong>
+                  <small>按住鼠标或手指，慢慢画</small>
+                </div>
+                <div class="companion" id="companion" hidden>
+                  <span class="companion-dot" aria-hidden="true"></span>
+                  <div class="companion-body">
+                    <p id="companionSay"></p>
+                    <div class="companion-actions">
+                      <button type="button" id="companionMore">换个提醒</button>
+                      <button type="button" id="companionClose" aria-label="收起提醒">✕</button>
+                    </div>
                   </div>
                 </div>
+                <div class="scan-layer" id="scanLayer" aria-hidden="true"><i></i></div>
               </div>
-              <div class="scan-layer" id="scanLayer" aria-hidden="true"><i></i></div>
+            </div>
+            <div class="canvas-foot" id="canvasFoot" hidden>
+              <span id="zoomHint">画布已放大，笔迹不会变形：按住空格或点「抓手」拖动查看。</span>
+              <button type="button" id="panBtn" aria-pressed="false">抓手 · 拖动画布</button>
             </div>
             <div class="toolbar">
               <div class="tool-group tools" role="group" aria-label="画笔类型">
@@ -346,35 +360,16 @@
         <div>
           <p class="kicker">STEP 03 · 非遗重构</p>
           <h2>让心里的风景，长成一件非遗</h2>
-          <p class="lead">你的画可能很简单，但 AI 不会直接把它贴上去。系统先读懂构图与元素，再用生成式模型二创成细节完整的非遗纹样，最后把你的原笔迹轻轻叠回画面。</p>
+          <p class="lead">你的画可能很简单，但 AI 不会直接把它贴上去。系统先读懂构图与元素，再用生成式模型二创成细节完整的剪纸纹样，最后把你的原笔迹轻轻叠回画面。本版只保留剪纸一门工艺，把「读懂 → 转译 → 真的能剪出来」这一条路走完整。</p>
         </div>
       </div>
 
       <div class="craft-shell reveal">
-        <div class="craft-tabs" id="craftTabs" role="tablist" aria-label="选择非遗工艺">
+        <!-- 本版只保留剪纸一种工艺：与其铺开八种「看起来都有」的样式，
+             不如把一种工艺的纹样出处、转译规则与手作路径做完整。 -->
+        <div class="craft-tabs craft-tabs-single" id="craftTabs" role="group" aria-label="当前非遗工艺">
           <button class="craft-tab active" data-style="papercut" role="tab" aria-selected="true">
-            <i class="swatch swatch-papercut"></i><strong>剪纸</strong><em>红纸镂空</em>
-          </button>
-          <button class="craft-tab" data-style="tiedye" role="tab" aria-selected="false">
-            <i class="swatch swatch-tiedye"></i><strong>扎染</strong><em>靛蓝晕染</em>
-          </button>
-          <button class="craft-tab" data-style="calico" role="tab" aria-selected="false">
-            <i class="swatch swatch-calico"></i><strong>蓝印花布</strong><em>白花靛底</em>
-          </button>
-          <button class="craft-tab" data-style="bamboo" role="tab" aria-selected="false">
-            <i class="swatch swatch-bamboo"></i><strong>竹编</strong><em>经纬交织</em>
-          </button>
-          <button class="craft-tab" data-style="shadow" role="tab" aria-selected="false">
-            <i class="swatch swatch-shadow"></i><strong>皮影</strong><em>镂雕透影</em>
-          </button>
-          <button class="craft-tab" data-style="embroidery" role="tab" aria-selected="false">
-            <i class="swatch swatch-embroidery"></i><strong>刺绣</strong><em>丝理针脚</em>
-          </button>
-          <button class="craft-tab" data-style="cloisonne" role="tab" aria-selected="false">
-            <i class="swatch swatch-cloisonne"></i><strong>掐丝珐琅</strong><em>铜丝填釉</em>
-          </button>
-          <button class="craft-tab" data-style="knot" role="tab" aria-selected="false">
-            <i class="swatch swatch-knot"></i><strong>绳结</strong><em>盘长同心</em>
+            <i class="swatch swatch-papercut"></i><strong>剪纸</strong><em>红纸镂空 · 本项目唯一启用工艺</em>
           </button>
         </div>
 
@@ -494,7 +489,7 @@
             <button data-mock="frame">装裱画</button>
             <button data-mock="card">明信片</button>
           </div>
-          <p class="mockup-note">你的图样可以印在帆布袋上，也可以作为剪纸、刺绣、掐丝珐琅的底稿。所有图样均可下载后自行打印。</p>
+          <p class="mockup-note">你的剪纸图样可以印在帆布袋上，也可以打印出来当作红纸剪裁的底稿。所有图样均可下载后自行打印。</p>
         </aside>
       </div>
     </div>
@@ -528,7 +523,7 @@
     </div>
     <div class="footer-meta">
       <p>AI 视觉：智谱 GLM-4V / GLM-4 / CogView</p>
-      <p>非遗工艺：剪纸 · 扎染 · 蓝印花布 · 竹编 · 皮影 · 刺绣 · 掐丝珐琅 · 绳结</p>
+      <p>非遗工艺：剪纸（红纸镂空 · 单一工艺纵深版）</p>
     </div>
     <p class="footer-note">本项目为大学生创新竞赛概念验证作品。心理分析仅供自我觉察，不替代专业心理咨询。</p>
   </div>
@@ -700,14 +695,14 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=a4e8c19"></script>
-<script src="assets/js/paint.js?v=a4e8c19"></script>
-<script src="assets/js/analyze.js?v=a4e8c19"></script>
-<script src="assets/js/craft.js?v=a4e8c19"></script>
-<script src="assets/js/knowledge.js?v=a4e8c19"></script>
-<script src="assets/js/heritage.js?v=a4e8c19"></script>
-<script src="assets/js/ai.js?v=a4e8c19"></script>
-<script src="assets/js/report.js?v=a4e8c19"></script>
-<script src="assets/js/app.js?v=a4e8c19"></script>
+<script src="assets/js/config.js?v=b6d2f08"></script>
+<script src="assets/js/paint.js?v=b6d2f08"></script>
+<script src="assets/js/analyze.js?v=b6d2f08"></script>
+<script src="assets/js/craft.js?v=b6d2f08"></script>
+<script src="assets/js/knowledge.js?v=b6d2f08"></script>
+<script src="assets/js/heritage.js?v=b6d2f08"></script>
+<script src="assets/js/ai.js?v=b6d2f08"></script>
+<script src="assets/js/report.js?v=b6d2f08"></script>
+<script src="assets/js/app.js?v=b6d2f08"></script>
 </body>
 </html>
