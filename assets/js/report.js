@@ -273,27 +273,14 @@
 
   function pickCraft(analysis) {
     const s = analysis.scores;
-    const m = analysis.metrics || {};
-    if (s.order > 62 && s.tension < 58) return "bamboo";
+    // 仅在两种已纳入项目的工艺中选择；不再把画面特征机械映射为其他工艺。
     if (s.space > 60 && s.warmth < 48) return "tiedye";
-    if (s.warmth > 58 && s.tension > 46) return "papercut";
-    // 画面有闭合结构且色彩鲜明 → 掐丝珐琅（先掐丝立骨，再一格一格填釉）
-    if (m.hasClosure && s.warmth > 50) return "cloisonne";
-    // 完形度高、气韵连贯 → 绳结（一线到底，循环不断）
-    if (s.completeness > 64) return "knot";
-    if (s.space > 52) return "calico";
     return "papercut";
   }
 
   const CRAFT_REASON = {
-    papercut: "你的线条有清晰的轮廓和方向感，适合被收拢成剪纸的刀路；红纸的暖，也能接住画面里的情绪。",
-    tiedye: "画面里的冷色与留白比较多，像一块被水浸过的布。扎染的晕染与冰裂纹，能让这种安静继续扩散。",
-    calico: "你的画面有明确的形状与边界，适合变成蓝印花布的白花靛底；防染的留白，正好像你给自己的空间。",
-    bamboo: "画面的秩序感与重复线条，适合竹编的经纬节奏。一压一挑，会把纷乱的心绪慢慢编回位置。",
-    shadow: "你的线条曲折有张力，像皮影的关节在动。镂雕与透影，能让这种张力在暖光里活起来。",
-    embroidery: "你的线条圆润交织，有丝理的走向。一针一线地绣，能让这些交织变成有温度的肌理。",
-    cloisonne: "你的线条闭合、色块分明，正适合掐丝珐琅：先用铜丝掐出轮廓，再一格一格填釉。慢工出细活，它会替你把心象烧制成不会褪色的样子。",
-    knot: "你的笔画首尾相连、气韵不断，这正是一根绳该有的样子。把它打成盘长结——绳没有头也没有尾，像那些一直在护着你的念头。"
+    papercut: "原画的主要轮廓可以转化为剪纸刀路；镂空、连桥与边饰用于工艺化表达，主体仍由你的原画决定。",
+    tiedye: "原画的色块边界与留白可转化为扎染防染区域；靛蓝层次与扎结位置作为工艺语言，不替换原画主体。"
   };
 
   const GUIDES = {
