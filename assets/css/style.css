@@ -2331,12 +2331,3 @@ a { color: inherit; }
   .report-cover h2 { font-size: 38px; }
   a { text-decoration: none; }
 }
-
-
-/* 用户主导的非遗共创确认区 */
-.meaning-check{margin:22px 0;padding:20px;border:1px solid var(--line,rgba(30,28,25,.14));border-radius:10px;background:rgba(255,255,255,.38)}
-.meaning-check h4{margin:6px 0 14px;font-size:1.05rem}
-.meaning-check label{display:block;margin:12px 0 6px;font-size:.86rem;color:var(--ink-soft,#49453e)}
-.meaning-check textarea,.meaning-check select{display:block;width:100%;padding:11px 12px;border:1px solid var(--line-strong,rgba(30,28,25,.22));border-radius:6px;background:var(--paper-light,#fcf9f2);color:var(--ink,#1e1c19);font:inherit;line-height:1.6}
-.meaning-check textarea{resize:vertical;min-height:68px}
-.meaning-check .micro{margin:10px 0 0;line-height:1.7}
