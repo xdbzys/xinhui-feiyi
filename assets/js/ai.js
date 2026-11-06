@@ -566,47 +566,25 @@
    * 后，六种工艺都能稳定产出可用的非遗画面。控制在 40–70 字。
    */
   const CRAFT_BRIEF = {
-    papercut: { name: "剪纸", material: "红纸镂空剪影，刀口利落", accent: "祥云纹镂空" },
-    tiedye: { name: "扎染", material: "靛蓝棉布晕染，冰裂纹", accent: "同心晕圈" },
-    calico: { name: "蓝印花布", material: "靛蓝底白花，刻版防染", accent: "缠枝纹" },
-    bamboo: { name: "竹编", material: "竹篾经纬交织", accent: "竹节纹" },
-    shadow: { name: "皮影", material: "牛皮镂雕剪影，侧身关节，暖黄透光", accent: "祥云纹镂空" },
-    embroidery: { name: "苏绣", material: "绸缎底缎绣针脚，丝线光泽", accent: "打籽点缀" },
-    cloisonne: { name: "掐丝珐琅", material: "景泰蓝铜丝掐丝填釉，釉面玻璃光泽", accent: "鎏金回字边" },
-    knot: { name: "绳结", material: "正红棉绳盘长结，一线到底", accent: "结耳与流苏" }
+    papercut: { name: "剪纸", material: "红纸剪刻、镂空与连桥，主体轮廓清晰", accent: "与主体相容的边饰纹样" },
+    tiedye: { name: "扎染", material: "靛蓝棉布、扎结或夹板防染、蓝白留白", accent: "围绕主体的扎结晕圈" }
   };
 
   /** 本地兜底：按线条特征联想一个具象意象 */
   function suggestImagery(analysis) {
     const v = (analysis && analysis.vision) || {};
-    const s = (analysis && analysis.scores) || {};
-    const htp = (analysis && analysis.htp) || {};
-    const layout = (v.layout || "");
-    const lineDir = htp.lineDirection || "方向多变";
-
-    if (/圆|圈|环|球/.test(layout)) return "一只展翅的纸鸢";
-    if (/三角|尖|山/.test(layout)) return "一座层叠的远山";
-    if (/交叉|十字|交/.test(layout)) return "一只盘踞的螭龙";
-    if (/方|框|格/.test(layout)) return "一扇万字花窗";
-    if (/波|曲|弧|弯/.test(layout)) return "一尾游动的锦鲤";
-    if (/散|点|碎/.test(layout)) return "一丛飘落的兰花";
-    if (/螺旋|涡|旋/.test(layout)) return "一团翻腾的云气";
-
-    if (lineDir.indexOf("斜") >= 0) return "一位飞天的舞者";
-    if (lineDir.indexOf("水平") >= 0) return "一叶扁舟与水面";
-    if (lineDir.indexOf("垂直") >= 0) return "一株并蒂的兰草";
-    if ((s.tension || 0) > 60) return "一只回首的瑞兽";
-    if ((s.vitality || 0) > 60) return "一丛盛放的牡丹";
-    if ((s.order || 0) > 60) return "一组对称的吉祥纹样";
-    return "一片写意的山水云纹";
+    const elements = (v.elements || []).map(x => String(x).trim()).filter(Boolean).slice(0, 4);
+    if (elements.length) return elements.join("、");
+    if (v.scene && v.scene.trim()) return v.scene.trim().slice(0, 24);
+    return "保留原画抽象线条与色块";
   }
 
   function fallbackPlan(analysis, style) {
     const meta = (window.XHFYCraft && window.XHFYCraft.META[style]) || {};
     return {
       imagery: suggestImagery(analysis),
-      imageryWhy: "线条的走向与疏密更像一具体有生命的形体，而不是纯粹的笔迹。",
-      motifWeave: "以祥云纹与缠枝纹填满线条之间的空白，让轮廓之外也有工艺的密度。",
+      imageryWhy: "未能可靠识别具体物体，因此保留原画线条、色块与空间关系，不额外添加主体。",
+      motifWeave: "仅在画面边缘使用轻量边饰，不覆盖原画主体，也不改变其位置关系。",
       craftNote: meta.short ? "以" + meta.short + "承载，材质与线条的张力最相合。" : ""
     };
   }
@@ -638,9 +616,6 @@
     // 提示词只保留与输出字段有关的部分：
     // 「艺术重构 / 材质光影」原是写给图像模型的，对这里的四个输出字段没有贡献，
     // 从提示词里挪进 motifWeave 的要求即可，省掉两次空转的输入 token。
-    const detectedElements = (v.elements || []).map(x => String(x).trim()).filter(Boolean).slice(0, 6);
-    const userIntent = (document.getElementById("craftIntentInput") || {}).value || "";
-    const userMeaning = ((document.getElementById("craftMeaningSelect") || {}).value || "由我自己定义");
     const detectedElements = (v.elements || []).map(x => String(x).trim()).filter(Boolean).slice(0, 6);
     const userIntent = (document.getElementById("craftIntentInput") || {}).value || "";
     const userMeaning = ((document.getElementById("craftMeaningSelect") || {}).value || "由我自己定义");
