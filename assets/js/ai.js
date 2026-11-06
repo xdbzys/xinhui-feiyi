@@ -485,7 +485,7 @@
         process: "80-130字过程印记，引用作画时长/停顿/撤销/换色/笔速中至少三项",
         mood: "50-80字当下心情，用也许/像是，并标注把握度",
         regulation: { id: "从 " + regIds + " 选最贴合证据的一个", why: "40-60字说明这个调节方法与哪些证据匹配" },
-        craft: { style: "papercut/tiedye/calico/bamboo 选一个", reason: "40-70字说明为何此工艺贴合画面结构", elements: "30-50字说明画面哪些元素如何转译为纹样" },
+        craft: { style: "papercut/tiedye 选一个", reason: "40-70字说明为何此工艺贴合画面结构", elements: "30-50字说明画面哪些元素如何转译为纹样" },
         guide: { intro: "30-50字", materials: ["4-6项"], steps: [{ title: "4-8字", text: "30-50字含正念呼吸" }], mantra: "20-35字正念引导语" }
       })
     ].join("\n");
@@ -638,31 +638,31 @@
     // 提示词只保留与输出字段有关的部分：
     // 「艺术重构 / 材质光影」原是写给图像模型的，对这里的四个输出字段没有贡献，
     // 从提示词里挪进 motifWeave 的要求即可，省掉两次空转的输入 token。
+    const detectedElements = (v.elements || []).map(x => String(x).trim()).filter(Boolean).slice(0, 6);
+    const userIntent = (document.getElementById("craftIntentInput") || {}).value || "";
+    const userMeaning = ((document.getElementById("craftMeaningSelect") || {}).value || "由我自己定义");
     const prompt = [
-      "你融合了东方美学大师、非遗传承人、心理分析师三重身份。",
-      "用户画的只是线条，读懂它背后的潜意识：一团乱麻可能是纠结的内心，可化作盘踞的螭龙；",
-      "一撇一捺可能是冲破束缚的翅膀，可化作展翅的纸鸢。",
-      "必须给出具象的自然或人文意象（飞天、瑞兽、游鱼、兰花、水波纹、纸鸢、仙鹤、螭龙、云气、莲、牡丹之类），",
-      "绝不能只描述线条本身。",
-      "工艺匹配：线条狂放断裂→皮影；细腻长短错落→苏绣；交错复杂→竹编；首尾相连成环→绳结；",
-      "闭合且色块分明→掐丝珐琅；大面积留白气韵生动→扎染或剪纸。",
-      "当前工艺：" + (meta.short || style) + "。若更契合别的工艺，在 craftNote 说明，但仍按当前工艺输出。",
-      "",
-      "画面证据：",
-      "- 线条走向：" + (htp.lineDirection || "方向多变") + "；笔触压力：" + (htp.pressure || "适中"),
-      "- 内在张力 " + (s.tension || 50) + "/100，秩序感 " + (s.order || 50) + "/100，留白占比 " + (s.space || 50) + "%",
-      "- 覆盖度 " + Math.round((m.coverage || 0) * 100) + "%，主色 " + (colors || "未提取"),
-      "- 布局：" + (v.layout || "无") + "；元素：" + ((v.elements || []).join("、") || "无"),
-      "- 心象图鉴：" + ((report && (report.archetype || report.title)) || "未命名"),
-      "",
-      '只输出 JSON：{"imagery":"≤12字具象意象，如：盘踞的螭龙","imageryWhy":"≤40字：为什么这几笔让你想到它","motifWeave":"≤50字：选祥云纹/缠枝纹/回字纹/水波纹等具体纹样，说明怎样填补线条之间的空白","craftNote":"≤40字：为何此工艺最契合，或更契合的工艺"}'
-    ].join("\n");
+      "你是中国传统剪纸与扎染工艺的纹样设计助手，不是心理诊断者。",
+      "必须忠实保留用户原画中已识别的主体类别、数量关系、相对位置、方向与主要轮廓。",
+      "禁止新增或替换主体；原画没有龙凤、花鸟或动物时，绝不可擅自添加这些元素。",
+      "只允许把原画轮廓转成剪纸刀路/镂空，或把色块边界转成扎染防染区/蓝白晕圈；传统纹样只作边饰，不得遮盖主体。",
+      "元素无法确定时，明确写抽象形态，不要猜测具体物体。",
+      "剪纸须考虑连桥、镂空、对称和可剪性；扎染须考虑扎结/夹防染、布面留白与靛蓝层次。",
+      "当前工艺：" + (meta.short || style) + "。",
+      "视觉模型识别到的原画元素（逐项保留）：" + (detectedElements.join("、") || "未能可靠识别，按抽象形态保留"),
+      "原画场景：" + (v.scene || "未能确定"),
+      "原画构图：" + (v.layout || "按用户原画位置关系保留"),
+      "主色：" + (colors || "未提取"),
+      "用户补充的主体校对：" + (userIntent || "用户未补充；以视觉识别元素为准"),
+      "用户确认的作品感受主题：" + userMeaning + "（不得反推心理诊断）",
+      "心理图鉴标题仅作叙事背景：" + ((report && (report.archetype || report.title)) || "未命名"),
+      '只输出 JSON：{"imagery":"只能用已识别元素组成≤18字标题，不得引入新主体","imageryWhy":"说明保留了原画哪些具体元素与位置，≤50字","motifWeave":"选择与主体相容的传统边饰纹样，并说明边饰位置，≤60字","craftNote":"说明该工艺如何保留原画主体及可制作性，≤50字"}'    ].join("\n");
 
     try {
       const content = await chat([
         { role: "system", content: ARTIST_SYSTEM },
         { role: "user", content: prompt }
-      ], { model: AI.textModel, kind: "text", temperature: 1.0, maxTokens: 400, json: true, timeout: 40000 });
+      ], { model: AI.textModel, kind: "text", temperature: 0.35, maxTokens: 500, json: true, timeout: 40000 });
       const parsed = extractJSON(content);
       const base = fallbackPlan(analysis, style);
       if (!parsed) return base;
