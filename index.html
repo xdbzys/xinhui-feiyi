@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>心绘非遗 · 基于 AI 绘画心理投射的疗愈文创生成系统</title>
-<meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，AI 读懂色彩、线条与留白，再把心象重绘成剪纸、扎染、蓝印花布与竹编，并生成一份可亲手完成的心愈手作指南。">
+<title>心绘非遗 · 基于情绪意象转译的 AI 非遗共创与数字化表达平台</title>
+<meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，由你确认画里的情绪意象，再把视觉锚点转译成有出处的传统纹样，生成剪纸、扎染、蓝印花布等非遗图样与可亲手完成的心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=f3c7d61">
+<link rel="stylesheet" href="assets/css/style.css?v=a4e8c19">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -70,7 +70,7 @@
         <p class="eyebrow"><span class="eyebrow-line"></span>大学生创新项目 · AI × 心理 × 非遗</p>
         <h1><span class="ink">心绘</span><span class="red">非遗</span></h1>
         <p class="hero-sub">以笔迹为舟，驶入心里的山水。</p>
-        <p class="hero-desc">画下闭上眼睛后最舒服的地方，让 AI 读懂色彩、线条与留白，再把它重绘成一件可以亲手完成的非遗作品。</p>
+        <p class="hero-desc">画下闭上眼睛后最舒服的地方，由你亲口确认画里的情绪意象，再把视觉锚点转译成有出处、可溯源的传统纹样，最终落成一件可以亲手完成的非遗作品。</p>
         <div class="hero-cta">
           <a class="btn btn-primary" href="#step1"><span>开始心象作画</span><i>→</i></a>
           <a class="btn btn-ghost" href="#flow">看看它如何发生</a>
@@ -97,7 +97,7 @@
         <div>
           <p class="kicker">THE FOURFOLD PATH</p>
           <h2>从一笔心绪，到一件非遗</h2>
-          <p class="lead">我们把艺术治疗中的「投射」方法、生成式 AI 与非遗纹样语法连接起来，形成一条可体验、可带走、可亲手完成的疗愈路径。</p>
+          <p class="lead">我们把艺术治疗中的「投射」方法、生成式 AI 与非遗纹样语法连接起来，形成「情绪绘画 → 视觉解析 → 情绪共创 → 文化转译 → 实体创造」五阶段体验：AI 不替你定义感受，纹样不凭空编造出处。</p>
         </div>
       </div>
       <div class="flow-grid">
@@ -110,13 +110,13 @@
         <article class="flow-card reveal">
           <span class="flow-no">贰</span>
           <h3>心象解码</h3>
-          <p>AI 同时读画面与作画过程：色彩、线条、留白，还有停顿、改笔与换色，生成《专属心灵图鉴》与心象处方。</p>
+          <p>AI 读画面与作画过程，生成《专属心灵图鉴》；随后只提出一种可能的情绪联想，由你确认、修改或否定。</p>
           <span class="flow-en">READ</span>
         </article>
         <article class="flow-card reveal">
           <span class="flow-no">叁</span>
           <h3>非遗重构</h3>
-          <p>AI 保留你的构图与笔迹，把朴素的涂鸦二创成细节完整的剪纸、扎染、蓝印花布或竹编。</p>
+          <p>按「原画锚点 → 情绪意象 → 有出处的传统纹样」三层融合生成，附纹样溯源卡与原画关联度报告。</p>
           <span class="flow-en">REWEAVE</span>
         </article>
         <article class="flow-card reveal">
@@ -306,6 +306,27 @@
             </article>
           </div>
 
+          <!-- 情绪意象共创：AI 只给一种可能的联想，由用户确认 / 修改 / 否定。
+               提问由本地依据「视觉元素 → 文化寓意」映射生成，不消耗任何 AI 额度。 -->
+          <div class="emotion-box" id="emotionBox" hidden>
+            <div class="emotion-head">
+              <span class="lang-no">CO-CREATE · 情绪共创</span>
+              <h4>这一步，由你来定</h4>
+              <p class="micro">AI 不替你定义感受。下面只是从画面里读出的一种可能联想。</p>
+            </div>
+            <p class="emotion-question" id="emotionQuestion"></p>
+            <div class="emotion-options" id="emotionOptions" role="group" aria-label="候选情绪意象"></div>
+            <div class="emotion-custom">
+              <input id="emotionCustom" type="text" maxlength="24" placeholder="我来说，比如：想安静待一会儿" aria-label="自定义情绪意象">
+              <button class="btn btn-small" id="emotionCustomBtn" type="button">就用这个</button>
+            </div>
+            <div class="emotion-foot">
+              <button class="link-btn" id="emotionSkip" type="button">都不像，先跳过 →</button>
+              <span class="emotion-state" id="emotionState">尚未确认</span>
+            </div>
+            <p class="emotion-disclaimer" id="emotionDisclaimer"></p>
+          </div>
+
           <div class="analysis-actions">
             <button id="toCraftBtn" class="btn btn-primary" type="button"><span>让它长成一件非遗</span><i>→</i></button>
             <button id="redrawBtn" class="btn btn-ghost light" type="button">再画一幅</button>
@@ -383,6 +404,24 @@
               <button id="downloadPattern" class="btn btn-ghost" type="button">下载打印级图样 · 2048px</button>
             </div>
             <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出 AI 读到的意象与工艺：它把你的线条当作主骨架，用祥云纹、缠枝纹、回字纹填满空白，再以该工艺的材质与光影成画。</p>
+
+            <!-- 纹样溯源卡 + 原画关联度报告：由本地知识库确定性生成，
+                 AI 不可用时同样完整可用，出处只取自《剪纸.pdf》。 -->
+            <div class="heritage-grid" id="heritageGrid" hidden>
+              <article class="heritage-card">
+                <span class="lang-no">PROVENANCE</span>
+                <h4 id="sourceCardTitle">纹样溯源卡</h4>
+                <dl class="heritage-list" id="sourceCardBody"></dl>
+                <div class="heritage-origins" id="sourceCardOrigins"></div>
+              </article>
+              <article class="heritage-card">
+                <span class="lang-no">RELEVANCE</span>
+                <h4>原画关联度报告</h4>
+                <dl class="heritage-list" id="relevanceBody"></dl>
+                <p class="micro" id="relevanceNote"></p>
+              </article>
+            </div>
+
             <div class="ai-art-meta" id="aiArtMeta" hidden>
               <span id="aiArtTitle">AI 二创 · 保留原构图</span>
               <a href="#" id="aiArtDownload" hidden>下载 AI 二创稿 ↓</a>
@@ -590,6 +629,12 @@
         </div>
       </section>
 
+      <section class="report-section report-provenance" id="reportProvenanceSection" hidden>
+        <h3><span>06B</span>纹样溯源与关联度</h3>
+        <dl class="heritage-list" id="reportProvenance"></dl>
+        <p class="micro" id="reportProvenanceNote"></p>
+      </section>
+
       <section class="report-section report-guide">
         <h3><span>07</span>心愈手作指南</h3>
         <p class="report-guide-intro" id="reportGuideIntro"></p>
@@ -655,13 +700,14 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=f3c7d61"></script>
-<script src="assets/js/paint.js?v=f3c7d61"></script>
-<script src="assets/js/analyze.js?v=f3c7d61"></script>
-<script src="assets/js/craft.js?v=f3c7d61"></script>
-<script src="assets/js/knowledge.js?v=f3c7d61"></script>
-<script src="assets/js/ai.js?v=f3c7d61"></script>
-<script src="assets/js/report.js?v=f3c7d61"></script>
-<script src="assets/js/app.js?v=f3c7d61"></script>
+<script src="assets/js/config.js?v=a4e8c19"></script>
+<script src="assets/js/paint.js?v=a4e8c19"></script>
+<script src="assets/js/analyze.js?v=a4e8c19"></script>
+<script src="assets/js/craft.js?v=a4e8c19"></script>
+<script src="assets/js/knowledge.js?v=a4e8c19"></script>
+<script src="assets/js/heritage.js?v=a4e8c19"></script>
+<script src="assets/js/ai.js?v=a4e8c19"></script>
+<script src="assets/js/report.js?v=a4e8c19"></script>
+<script src="assets/js/app.js?v=a4e8c19"></script>
 </body>
 </html>

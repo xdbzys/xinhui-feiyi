@@ -21,6 +21,9 @@
     // 已生成过的二创稿按工艺缓存：切换工艺再切回来直接复用，
     // 不再重复调用图像模型（图像按张计费/占免费额度，是全流程最贵的一步）。
     craftCache: {},
+    // 情绪意象由用户本人确认（AI 只给可能性，不替用户定义感受）
+    emotionTheme: "",
+    emotionConfirmed: false,
     regulations: [],
     regulationIndex: 0,
     busy: false
@@ -474,6 +477,14 @@
     state.analysis.aiVision = aiVisionOK;
     state.analysis.aiReport = !!aiReport;
     state.analysis.userText = text;
+    // 视觉档案挂到 analysis：craftPlan / craftBlueprint 的「内容约束」依赖
+    // elements / layout / mood / anchors，否则提示词拿不到原画骨架，
+    // 三层融合会退化成凭空生成。此前只挂在 report 与 state.vision 上，这里补齐。
+    state.analysis.vision = state.vision || {};
+    // 新画作重置情绪共创确认，避免沿用上一幅画的主题
+    state.emotionTheme = "";
+    state.emotionConfirmed = false;
+    state.analysis.emotionTheme = "";
 
     // 非遗：只保留 AI 二创，本地纹样已移除；工艺信息先就位，二创由用户主动生成
     setStage("craft", "done");
@@ -483,7 +494,9 @@
     updateCraftInfo(style);
 
     renderAnalysis();
+    renderEmotion();
     renderGuide();
+    renderHeritageCards();
     finishLoading();
     await sleep(600);
     $("#analysisResult").hidden = false;
@@ -652,6 +665,158 @@
       state.regulationIndex++;
       renderRegulation();
     });
+  }
+
+  /* =========================================================
+     情绪意象共创
+     《方案.docx》最推荐的创新点：AI 不直接给用户下心理结论，
+     而是提出一种可能的情绪意象解释，由用户确认 / 修改 / 否定。
+     提问与候选全部由 heritage.js 本地确定性生成，零 API 消耗。
+     ========================================================= */
+
+  function syncEmotionState() {
+    const el = $("#emotionState");
+    if (!el) return;
+    const label = $("#toCraftBtn") && $("#toCraftBtn").querySelector("span");
+    if (state.emotionConfirmed && state.emotionTheme) {
+      el.textContent = "已确认：「" + state.emotionTheme + "」";
+      el.classList.add("confirmed");
+      if (label) label.textContent = "带着这个感受，长成一件非遗";
+    } else {
+      el.textContent = state.emotionTheme ? "已跳过（未确认）" : "尚未确认";
+      el.classList.remove("confirmed");
+      if (label) label.textContent = "让它长成一件非遗";
+    }
+  }
+
+  function renderEmotion() {
+    const H = window.XHFYHeritage;
+    const box = $("#emotionBox");
+    if (!box || !H) return;
+    const p = H.buildEmotionPrompt(state.vision, state.analysis);
+    $("#emotionQuestion").textContent = p.question;
+    $("#emotionDisclaimer").textContent = p.disclaimer + "（" + p.source + "）";
+    $("#emotionOptions").innerHTML = p.options.map((t) =>
+      '<button type="button" class="emotion-opt' +
+      (state.emotionTheme === t ? " active" : "") +
+      '" data-theme="' + escapeHTML(t) + '">' + escapeHTML(t) + "</button>").join("");
+    $("#emotionCustom").value = "";
+    box.hidden = false;
+    syncEmotionState();
+  }
+
+  function applyEmotion(theme) {
+    const t = String(theme || "").trim().slice(0, 24);
+    state.emotionTheme = t;
+    state.emotionConfirmed = !!t;
+    if (state.analysis) state.analysis.emotionTheme = t;
+    // 主题变了，旧的意象联想与已生成图样不再对应：
+    // craftPlan 的缓存键已含主题，无需手动清；按工艺缓存的图样要清空，
+    // 并允许重新出图（保留当前画面，不主动抹掉用户已看到的成品）。
+    state.craftCache = {};
+    state.aiBaseStyle = "";
+    $$(".emotion-opt").forEach((b) => b.classList.toggle("active", b.dataset.theme === t));
+    syncEmotionState();
+    renderHeritageCards();
+    toast(t
+      ? "已记下：「" + t + "」。重新生成二创会带着这个主题"
+      : "已跳过，系统不会替你定义感受", 3600);
+  }
+
+  function initEmotion() {
+    if (!window.XHFYHeritage) return;
+    $("#emotionOptions").addEventListener("click", (e) => {
+      const b = e.target.closest(".emotion-opt");
+      if (b) applyEmotion(b.dataset.theme);
+    });
+    $("#emotionCustomBtn").addEventListener("click", () => {
+      const val = $("#emotionCustom").value.trim();
+      if (!val) { toast("写一句你自己的感受，或者选「都不像」"); return; }
+      applyEmotion(val);
+    });
+    $("#emotionCustom").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("#emotionCustomBtn").click();
+    });
+    $("#emotionSkip").addEventListener("click", () => {
+      $("#emotionCustom").value = "";
+      applyEmotion("");
+    });
+  }
+
+  /* =========================================================
+     纹样溯源卡 + 原画关联度报告
+     全部由 heritage.js 确定性生成：AI 不可用时同样完整可用，
+     出处只取自《剪纸.pdf》，模型不得杜撰。
+     ========================================================= */
+
+  function heritageContext() {
+    const v = (state.analysis && state.analysis.vision) || state.vision || {};
+    const elements = (v.elements && v.elements.length) ? v.elements : (v.anchors || []);
+    return {
+      elements: elements,
+      style: state.craftStyle,
+      emotionTheme: state.emotionTheme,
+      mood: v.mood || "",
+      palette: ((state.analysis && state.analysis.dominantColors) || []).slice(0, 3)
+        .map((c) => c.name).filter(Boolean).join("、"),
+      layout: String(v.layout || "").slice(0, 30)
+    };
+  }
+
+  function renderHeritageCards() {
+    const H = window.XHFYHeritage;
+    const grid = $("#heritageGrid");
+    if (!grid || !H) return;
+    if (!state.analysis || !state.report) { grid.hidden = true; return; }
+
+    const ctx = heritageContext();
+    const motifs = H.matchMotifs(ctx);
+    const translated = H.translateElements(ctx.elements, ctx.style);
+    const card = H.sourceCard(Object.assign({}, ctx, { motifs: motifs, translated: translated }));
+    const rep = H.relevanceReport(Object.assign({}, ctx, { motifs: motifs, translated: translated }));
+
+    grid.hidden = false;
+    $("#sourceCardTitle").textContent = card.title;
+    const rows = [
+      ["保留的原画元素", card.kept.join("、")],
+      ["转化成的纹样", translated.length
+        ? translated.map((t) => t.element + " → " + t.motif + "（" + t.source + "）").join("；")
+        : "（本次未识别到具名元素，保留原笔迹骨架）"],
+      ["为何这样配色构图", card.colorWhy],
+      ["情绪主题", card.emotionTheme],
+      ["怎样亲手制作", card.howTo]
+    ];
+    $("#sourceCardBody").innerHTML = rows.map(([k, val]) =>
+      "<div><dt>" + escapeHTML(k) + "</dt><dd>" + escapeHTML(val) + "</dd></div>").join("");
+    $("#sourceCardOrigins").innerHTML = card.origins.length
+      ? '<b class="heritage-origin">出处与地域（转录自《剪纸.pdf》，未作外部核验）</b>' +
+        card.origins.map((o) =>
+          '<span class="heritage-origin">' + escapeHTML(o.motif) + " · " +
+          escapeHTML(o.region) + " · " + escapeHTML(o.craft) +
+          '：<a href="' + escapeHTML(o.url) +
+          '" target="_blank" rel="noopener noreferrer">' + escapeHTML(o.title) + "</a></span>").join("")
+      : "";
+    $("#relevanceBody").innerHTML = rep.items.map((it) =>
+      "<div><dt>" + escapeHTML(it.label) + "</dt><dd>" + escapeHTML(it.value) +
+      " <em>（" + escapeHTML(it.evidence) + "）</em></dd></div>").join("");
+    $("#relevanceNote").textContent = rep.note + " " + rep.boundary;
+
+    // 图鉴内同步一份精简溯源，打印成 PDF 时可带走
+    const sec = $("#reportProvenanceSection");
+    if (sec) {
+      sec.hidden = false;
+      $("#reportProvenance").innerHTML = [
+        ["保留元素", card.kept.join("、")],
+        ["文化纹样", card.origins.length
+          ? card.origins.map((o) => o.motif + "（" + o.region + "）").join("；")
+          : "（无具名纹样）"],
+        ["情绪主题", card.emotionTheme],
+        ["工艺可行性", rep.items[3].value]
+      ].map(([k, val]) =>
+        "<div><dt>" + escapeHTML(k) + "</dt><dd>" + escapeHTML(val) + "</dd></div>").join("");
+      $("#reportProvenanceNote").textContent =
+        rep.boundary + " 完整溯源卡与关联度报告见第 ③ 步页面。";
+    }
   }
 
   function escapeHTML(s) {
@@ -967,6 +1132,8 @@
           }
         }
         updateCraftInfo(style);
+        // 换工艺后转译规则与溯源出处随之改变，两张卡片同步重算
+        renderHeritageCards();
         if (state.report && state.analysis) {
           const fb = window.XHFYReport.makeFallbackReport(state.analysis, state.analysis.userText || "", state.vision, style);
           // AI 写的手作指南只针对它推荐的工艺；换工艺后改用该工艺的本地指南
@@ -1358,6 +1525,7 @@
     initReport();
     initCompanion();
     initAnalysisActions();
+    initEmotion();
     initSettings();
   }
 

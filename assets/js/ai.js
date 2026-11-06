@@ -318,7 +318,8 @@
       "观察这幅画，用温和具体的语言描述你看到的。不做心理诊断，不评价好坏。",
       analysis ? ("作画过程（仅辅助理解，不复述数字）：" + describeProcess(analysis)) : "",
       "用户自述：" + (userText || "未填写"),
-      "只输出 JSON：{\"scene\":\"场景≤20字\",\"elements\":[\"2-6个元素，2-6字\"],\"dominant_colors\":[\"2-4个主色名\"],\"line_quality\":\"线条感受≤20字\",\"space\":\"空间感受≤20字\",\"mood\":\"氛围≤20字\",\"cold_or_warm\":\"冷/暖/中性\",\"layout\":\"一句话说明每个主要图形在画面的位置与走向，如“从左下到右上的斜线、中部空心方块、右上圆圈”，≤60字\",\"note\":\"克制观察≤30字\"}"
+      "建立「原画视觉档案」：先认出画面主体，再按重要性从主到次列出元素；前两个是核心主体，后续二创不得替换它们。",
+      "只输出 JSON：{\"scene\":\"场景≤20字\",\"subject\":\"画面主体，≤10字\",\"elements\":[\"2-6个元素，按重要性从主到次排列，2-6字\"],\"dominant_colors\":[\"2-4个主色名\"],\"line_quality\":\"线条感受≤20字\",\"space\":\"空间感受≤20字\",\"mood\":\"氛围≤20字\",\"cold_or_warm\":\"冷/暖/中性\",\"layout\":\"一句话说明每个主要图形在画面的位置与走向，如“从左下到右上的斜线、中部空心方块、右上圆圈”，≤60字\",\"note\":\"克制观察≤30字\"}"
     ].filter(Boolean).join("\n");
 
     const content = await chat([
@@ -342,7 +343,10 @@
     if (!parsed) throw new Error("视觉模型返回格式异常");
     return {
       scene: parsed.scene || "",
+      subject: parsed.subject || "",
       elements: Array.isArray(parsed.elements) ? parsed.elements.slice(0, 6) : [],
+      // 核心元素锁定清单：前 3 个是「原画视觉档案」里不可替换的锚点
+      anchors: Array.isArray(parsed.elements) ? parsed.elements.slice(0, 3) : [],
       dominantColors: Array.isArray(parsed.dominant_colors) ? parsed.dominant_colors.slice(0, 4) : [],
       lineQuality: parsed.line_quality || "",
       space: parsed.space || "",
@@ -446,6 +450,7 @@
       "10. 逐维读 FEATS：对已给分的维度逐一说明「分数 → 画面证据 → 可能含义」；标注「不适用」的维度一律不要评，也不要换说法硬评。",
       "11. 必须写出至少一处内部矛盾或不确定（如色彩与线条指向相反、某维度证据不足），并写明本次分析的局限。",
       "12. 新三维度必须解读：自我力量（Koch/Machover）、完形程度（Jung）、视觉平衡（Arnheim）每个都要给出分数→证据→含义，并标注来源框架。",
+      "13. 情绪意象解释只作为「一种可能」提供，须写明用户可以修改或否定；不得把某个视觉元素或某种颜色直接等同某种心理状态，不得写「画了 X 就一定代表 Y」。",
       "",
       "【量化视觉分析（本地算法，0–100，已按画面尺度归一化）】",
       describeAnalysis(analysis),
@@ -625,7 +630,11 @@
   }
 
   async function craftPlan(analysis, report, style) {
-    if (planCache[style]) return planCache[style];
+    // 用户确认的情绪主题会改变意象方向，纳入缓存键：
+    // 改了主题必须重新生成，不能复用旧 plan。
+    const emotionTheme = (analysis && analysis.emotionTheme) || "";
+    const cacheKey = style + "|" + emotionTheme;
+    if (planCache[cacheKey]) return planCache[cacheKey];
 
     const v = (analysis && analysis.vision) || {};
     const s = (analysis && analysis.scores) || {};
@@ -647,6 +656,15 @@
       "工艺匹配：线条狂放断裂→皮影；细腻长短错落→苏绣；交错复杂→竹编；首尾相连成环→绳结；",
       "闭合且色块分明→掐丝珐琅；大面积留白气韵生动→扎染或剪纸。",
       "当前工艺：" + (meta.short || style) + "。若更契合别的工艺，在 craftNote 说明，但仍按当前工艺输出。",
+      "",
+      // 三层融合硬约束：内容 / 文化 / 工艺（《方案.docx》），
+      // 可用纹样与出处只取自纹样溯源知识库（《剪纸.pdf》），模型不得杜撰。
+      window.XHFYHeritage
+        ? window.XHFYHeritage.constraintBrief(style, v.elements, {
+            emotionTheme: emotionTheme,
+            mood: v.mood
+          })
+        : "",
       "",
       "画面证据：",
       "- 线条走向：" + (htp.lineDirection || "方向多变") + "；笔触压力：" + (htp.pressure || "适中"),
@@ -673,7 +691,7 @@
         craftNote: String(parsed.craftNote || base.craftNote).slice(0, 80)
       };
       // 只缓存模型真正给出的结果，兜底方案不进缓存
-      planCache[style] = plan;
+      planCache[cacheKey] = plan;
       return plan;
     } catch (e) {
       return fallbackPlan(analysis, style);
@@ -684,24 +702,45 @@
    * 第三步 + 第四步：把意象与工艺写成短提示词。
    * 只有「一件具象作品」这一个中心，模型才不会跑到别的题材上。
    * 同时回灌用户的真实数据——主色、氛围、构图方位——
-   * 让文本生图模型（CogView-3-Flash 不支持图生图）也能回响原画的骨架与色彩，
-   * 而不是凭空编一张非遗图。控制总字数 ≤72，避免模型失焦。
+   * 让文本生图模型（CogView-3-Flash 不支持图生图）也能回响原画的骨架与色彩。
+   *
+   * 三层融合（《方案.docx》）在这里落到图像提示词：
+   *   - 内容约束：写入「原画视觉档案」的核心锚点，明确保留、不得替换题材；
+   *   - 文化约束：只写入有文献转译规则的传统纹样名，出处来自《剪纸.pdf》；
+   *   - 工艺约束：材质与工艺语法由 CRAFT_BRIEF 给定，不追求纯视觉效果。
+   * 附加项按优先级逐条追加，总长控制在 ~120 字内，避免模型失焦。
    */
   function craftBlueprint(analysis, report, style, plan) {
     const b = CRAFT_BRIEF[style] || CRAFT_BRIEF.papercut;
     const p = plan || fallbackPlan(analysis, style);
     const a = analysis || {};
     const v = a.vision || {};
+    const H = window.XHFYHeritage;
     const palette = (a.dominantColors || []).slice(0, 3)
       .map((c) => c.name).filter(Boolean).join("、");
     // 视觉模型看到的构图方位，是「复刻原画骨架」最关键的线索；截断避免超出字数预算
     const layout = (v.layout || "").slice(0, 22);
     const mood = (v.mood || "").slice(0, 10);
 
-    let prompt = "中国" + b.name + "：" + p.imagery + "，" + b.material + "，" + b.accent;
-    if (palette) prompt += "，主色" + palette;
-    if (mood) prompt += "，" + mood;
-    if (layout) prompt += "，构图" + layout;
+    const anchorSource = (v.anchors && v.anchors.length) ? v.anchors : (H ? H.anchorsOf(v.elements) : []);
+    const anchors = anchorSource.slice(0, 2);
+    // 只取有明确文献转译表的纹样名；其余工艺使用项目语法，不塞长描述
+    const ruleMotifs = H ? H.translateElements(v.elements, style)
+      .filter((t) => t.fromRule).slice(0, 2).map((t) => t.motif) : [];
+    const emotion = String(a.emotionTheme || "").slice(0, 8);
+
+    const must = "中国" + b.name + "：" + p.imagery + "，" + b.material + "，" + b.accent +
+      (palette ? "，主色" + palette : "");
+    const extra = [];
+    if (anchors.length) extra.push("保留" + anchors.join("、"));
+    if (ruleMotifs.length) extra.push(ruleMotifs.join("、"));
+    if (emotion) extra.push(emotion);
+    if (mood) extra.push(mood);
+    if (layout) extra.push("构图" + layout);
+    let prompt = must;
+    extra.forEach((x) => {
+      if (prompt.length + x.length + 1 <= 108) prompt += "，" + x;
+    });
     prompt += "，大面积留白，无文字";
 
     return {
@@ -714,7 +753,10 @@
       style,
       palette,
       layout,
-      mood
+      mood,
+      anchors: anchors,
+      heritageMotifs: ruleMotifs,
+      emotionTheme: a.emotionTheme || ""
     };
   }
 

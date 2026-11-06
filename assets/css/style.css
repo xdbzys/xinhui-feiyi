@@ -2331,3 +2331,165 @@ a { color: inherit; }
   .report-cover h2 { font-size: 38px; }
   a { text-decoration: none; }
 }
+
+/* =========================================================
+   情绪意象共创（step2 深色章节）+ 纹样溯源卡（step3 浅色章节）
+   ========================================================= */
+
+/* ---- 情绪共创：位于 chapter-dark 内，文字用浅色 ---- */
+.emotion-box {
+  margin: 26px 0 0;
+  padding: 26px 28px;
+  border: 1px solid rgba(239, 232, 218, 0.18);
+  background: rgba(239, 232, 218, 0.045);
+  border-radius: 2px;
+}
+.emotion-head { margin-bottom: 16px; }
+.emotion-box .lang-no {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: rgba(239, 232, 218, 0.42);
+}
+.emotion-box h4 {
+  margin: 8px 0 6px;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #f4ecdd;
+}
+.emotion-box .micro { color: rgba(239, 232, 218, 0.45); font-size: 10px; }
+.emotion-question {
+  margin: 0 0 18px;
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.95;
+  color: #f4ecdd;
+}
+.emotion-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.emotion-opt {
+  padding: 10px 16px;
+  border: 1px solid rgba(239, 232, 218, 0.28);
+  background: transparent;
+  color: rgba(239, 232, 218, 0.82);
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 0.25s var(--ease), color 0.25s var(--ease), background 0.25s var(--ease);
+}
+.emotion-opt:hover { border-color: #d8b48a; color: #fff8ec; }
+.emotion-opt.active { background: #efe8da; color: var(--ink); border-color: #efe8da; }
+.emotion-custom { display: flex; gap: 10px; margin-top: 16px; }
+.emotion-custom input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 232, 218, 0.22);
+  background: rgba(0, 0, 0, 0.14);
+  color: #f4ecdd;
+  font-family: var(--sans);
+  font-size: 12px;
+  border-radius: 2px;
+}
+.emotion-custom input::placeholder { color: rgba(239, 232, 218, 0.34); }
+.emotion-custom input:focus { outline: none; border-color: #d8b48a; }
+.emotion-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.emotion-box .link-btn { color: rgba(239, 232, 218, 0.62); border-color: rgba(239, 232, 218, 0.2); }
+.emotion-box .link-btn:hover { color: #f4ecdd; border-color: #d8b48a; }
+.emotion-state { font-size: 10.5px; letter-spacing: 0.04em; color: rgba(239, 232, 218, 0.45); white-space: nowrap; }
+.emotion-state.confirmed { color: #d8b48a; }
+.emotion-disclaimer {
+  margin: 16px 0 0;
+  font-size: 9.5px;
+  line-height: 1.85;
+  color: rgba(239, 232, 218, 0.34);
+}
+
+/* ---- 纹样溯源卡 / 关联度报告：浅色纸面 ---- */
+.heritage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.heritage-card {
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  background: var(--paper-light);
+  border-radius: 2px;
+}
+.heritage-card .lang-no {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--ink-mute);
+}
+.heritage-card h4 {
+  margin: 8px 0 14px;
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.heritage-list { margin: 0; padding: 0; }
+.heritage-list > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.heritage-list dt { font-size: 10px; letter-spacing: 0.06em; color: var(--ink-mute); }
+.heritage-list dd {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.85;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+.heritage-list dd em { font-style: normal; font-size: 9.5px; color: var(--ink-mute); }
+.heritage-origins { margin-top: 12px; }
+.heritage-origin {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--ink-mute);
+}
+.heritage-origin a {
+  color: var(--indigo);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+.heritage-card .micro,
+.report-provenance .micro {
+  margin-top: 12px;
+  font-size: 9.5px;
+  line-height: 1.85;
+  color: var(--ink-mute);
+}
+.report-provenance .heritage-list { margin-top: 12px; }
+
+@media (max-width: 760px) {
+  .heritage-grid { grid-template-columns: 1fr; }
+  .heritage-list > div { grid-template-columns: 78px 1fr; }
+  .emotion-box { padding: 20px 18px; }
+  .emotion-custom { flex-wrap: wrap; }
+  .emotion-custom input { flex: 1 1 100%; }
+  .emotion-foot { align-items: flex-start; flex-direction: column; }
+}
+
+@media print {
+  .heritage-grid { grid-template-columns: 1fr 1fr; }
+  .report-provenance { display: block !important; }
+}
