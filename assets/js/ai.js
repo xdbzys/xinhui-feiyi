@@ -641,6 +641,9 @@
     const detectedElements = (v.elements || []).map(x => String(x).trim()).filter(Boolean).slice(0, 6);
     const userIntent = (document.getElementById("craftIntentInput") || {}).value || "";
     const userMeaning = ((document.getElementById("craftMeaningSelect") || {}).value || "由我自己定义");
+    const detectedElements = (v.elements || []).map(x => String(x).trim()).filter(Boolean).slice(0, 6);
+    const userIntent = (document.getElementById("craftIntentInput") || {}).value || "";
+    const userMeaning = ((document.getElementById("craftMeaningSelect") || {}).value || "由我自己定义");
     const prompt = [
       "你是中国传统剪纸与扎染工艺的纹样设计助手，不是心理诊断者。",
       "必须忠实保留用户原画中已识别的主体类别、数量关系、相对位置、方向与主要轮廓。",
