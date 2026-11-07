@@ -1,5 +1,5 @@
 /* =========================================================
-   心绘非遗 · 本地 CORS 中继（可选）
+   心绘非遗 · 本地 CORS 中继（本地开发 / 演示用）
    用途：智谱 API 的 OPTIONS 预检不返回 CORS 头，纯静态页面
    无法在浏览器里直连。本脚本在本地起一个 30 行的中继，
    让网站可以调用真实的 GLM-4V / GLM-4 / CogView。
@@ -7,6 +7,10 @@
    启动：node tools/relay.mjs
    然后修改 assets/js/config.js：
      relay: "http://127.0.0.1:8787/?url={url}"
+
+   线上演示（评委远程访问线上站点）请改用公网中继：
+   见 proxy/worker.js（Cloudflare Workers，部署后把 relay 换成
+   https://你的worker名.workers.dev/?url={url}）。
    ========================================================= */
 import http from "node:http";
 

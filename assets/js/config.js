@@ -1,8 +1,9 @@
 /* 心绘非遗 · 前端配置 */
 window.XHFY_CONFIG = {
   ai: {
-    // www.bigmodel.cn 域名对 chat / vision / images 全部返回 CORS 头，
-    // 浏览器可直连文本分析与视觉分析；open.bigmodel.cn 的 chat/completions 不返回 CORS 头。
+    // 智谱 API（www.bigmodel.cn / open.bigmodel.cn）的 OPTIONS 预检都不返回
+    // CORS 头，浏览器端 fetch(application/json) 必然触发预检而被拦截，无法直连；
+    // 必须经 relay 中继转发（见下方 relay 字段）。这是智谱官方端点对浏览器直连的硬限制。
     base: "https://www.bigmodel.cn/api/paas/v4",
     visionModel: "glm-4v-flash",
     textModel: "glm-4-flash",
@@ -23,8 +24,13 @@ window.XHFY_CONFIG = {
     imageModel: "cogview-3-flash",
     // 演示站点内置 Key（Base64 存放，避免被简单抓取）。
     keyCipher: "NmZjMDY5MzUyYzk4NDg5OWI2MTkzNzMzYTg1MTNjYzEuRWVZZlVCRmozdEVxcUNacQ==",
-    // 可选 CORS 中继。www.bigmodel.cn 已支持 CORS，默认留空即可直连。
-    relay: ""
+    // CORS 中继（浏览器直连智谱 API 的唯一通路）。ai.js 会「中继优先、直连兜底」。
+    //   · 本地开发/演示：在本机跑 `node tools/relay.mjs`，保持下面的默认值即可；
+    //   · 线上演示（评委远程访问）：把中继部署成公网服务后，改成对应地址，
+    //     例如 `relay: "https://你的worker名.workers.dev/?url={url}"`。
+    //     部署脚本见仓库 `proxy/worker.js`（Cloudflare Workers，免费额度即可）。
+    //   · 留空 "" 表示不使用中继（此时 AI 分析在浏览器里会因 CORS 失败而降级本地引擎）。
+    relay: "http://127.0.0.1:8787/?url={url}"
   },
   paper: "#FBF7EC",
   storageKey: "xhfy.zhipu.key"

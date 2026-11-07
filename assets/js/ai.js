@@ -171,12 +171,13 @@
       "Authorization=" + encodeURIComponent("Bearer " + key);
     const relay = (AI.relay || "").trim();
 
-    // 尝试顺序：直连 → 中继（如果配置了）
-    // www.bigmodel.cn 对 chat/vision/images 全部支持 CORS，直连即可；
-    // 若自定义了中继则作为兜底。直连失败时调用方降级到本地引擎。
+    // 尝试顺序：中继优先 → 直连兜底。
+    // 智谱 API 的 OPTIONS 预检不返回 CORS 头，浏览器里直连必然被 CORS 拦截；
+    // 因此配置了中继时先走中继（省掉一次注定失败的直连请求），
+    // 中继不可用再回退直连（少数内网/代理环境可能放行直连）。
     const attempts = [];
-    attempts.push({ url: full, label: "直连" });
     if (relay) attempts.push({ url: relay.replace("{url}", encodeURIComponent(full)), label: "中继" });
+    attempts.push({ url: full, label: "直连" });
 
     let lastErr = null;
     // 服务端明确返回的错误（带 HTTP status）。必须保留它的原始消息：
