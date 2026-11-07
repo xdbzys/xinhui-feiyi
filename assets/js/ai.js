@@ -166,18 +166,22 @@
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout || 60000);
 
-    // 鉴权放 query string（避免 Authorization 头触发预检）
-    const full = AI.base + path + (path.indexOf("?") >= 0 ? "&" : "?") +
-      "Authorization=" + encodeURIComponent("Bearer " + key);
+    // 鉴权放 query string（避免 Authorization 头触发额外预检）
+    const auth = "Authorization=" + encodeURIComponent("Bearer " + key);
     const relay = (AI.relay || "").trim();
 
-    // 尝试顺序：中继优先 → 直连兜底。
-    // 智谱 API 的 OPTIONS 预检不返回 CORS 头，浏览器里直连必然被 CORS 拦截；
-    // 因此配置了中继时先走中继（省掉一次注定失败的直连请求），
-    // 中继不可用再回退直连（少数内网/代理环境可能放行直连）。
+    // 尝试顺序：主站直连 → 备用站直连（后者可选）。
+    // 主站 api.z.ai 的 OPTIONS 预检带完整 CORS 头，浏览器可直接发 application/json；
+    // 备用站 www.bigmodel.cn 的预检不带 CORS 头，只在部分环境能通，作为兜底。
+    const bases = [AI.base];
+    if (AI.baseFallback && AI.baseFallback !== AI.base) bases.push(AI.baseFallback);
+
     const attempts = [];
-    if (relay) attempts.push({ url: relay.replace("{url}", encodeURIComponent(full)), label: "中继" });
-    attempts.push({ url: full, label: "直连" });
+    bases.forEach((b) => {
+      const full = b + path + (path.indexOf("?") >= 0 ? "&" : "?") + auth;
+      attempts.push({ url: full, label: "直连" });
+      if (relay) attempts.push({ url: relay.replace("{url}", encodeURIComponent(full)), label: "中继" });
+    });
 
     let lastErr = null;
     // 服务端明确返回的错误（带 HTTP status）。必须保留它的原始消息：
@@ -794,11 +798,13 @@
 
   /** 把图像 URL 取回为 dataURL（供 canvas 裁切使用） */
   async function imageToDataURL(url) {
+    // 图床直连必然被 CORS 拦（不返回 Access-Control-Allow-Origin），
+    // 因此先走 weserv 网关，直连只作为最后兜底。
     const attempts = [];
     const relay = (AI.relay || "").trim();
-    attempts.push(url);
-    if (relay) attempts.push(relay.replace("{url}", encodeURIComponent(url)));
     attempts.push(IMAGE_GATEWAY + encodeURIComponent(url) + "&output=png");
+    if (relay) attempts.push(relay.replace("{url}", encodeURIComponent(url)));
+    attempts.push(url);
 
     for (const u of attempts) {
       try {
