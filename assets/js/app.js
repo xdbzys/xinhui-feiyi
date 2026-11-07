@@ -1192,8 +1192,17 @@
       const plan = await window.XHFYAI.craftPlan(state.analysis, state.report, style);
       const bp = window.XHFYAI.craftBlueprint(state.analysis, state.report, style, plan);
       state.aiBlueprint = bp;
-      loaderText.textContent = "AI 读到的意象：" + bp.imagery + " · 正在以" + meta.short + "重构…";
-      const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report);
+      loaderText.textContent = "AI 读到的意象：" + bp.imagery + " · 正在看着你的画重构" + meta.short + "…";
+      // 图生图参考图：把用户真实画作合成 1024 方形稿传给图像模型，
+      // 让免费模型也能真正「看到」原画再转译，而非只靠文字回灌骨架。
+      let refImage = "";
+      try {
+        refImage = studio.compositeSquare(1024, 0.08).toDataURL("image/jpeg", 0.82);
+      } catch (e) {
+        console.warn("[心绘非遗] 导出参考图失败，退文生图", e && (e.message || e));
+        refImage = "";
+      }
+      const url = await window.XHFYAI.craftRedraw(style, bp, state.analysis, state.report, refImage);
 
       // 成品整幅保留，原笔迹以低透明度叠回作为骨架证据
       loaderText.textContent = "正在把你的骨架叠回" + meta.short + "成品…";

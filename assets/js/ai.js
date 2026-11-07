@@ -575,8 +575,22 @@
    * 堆在一起时曾生成过建筑照片与人像；改成「工艺＋一个具象意象＋两条材质关键词」
    * 后，剪纸能稳定产出可用的红纸镂空画面。控制在 40–70 字。
    */
+  /**
+   * 剪纸工艺语法（源自民间剪纸「阴阳刻 + 基础纹饰符号」通识）。
+   * 基础纹饰：太阳纹、月牙纹、锯齿纹、柳叶纹、水滴纹、云纹、几何纹。
+   * 注入图像提示词，让模型产出符合真实剪纸语汇的画面，而非「像剪纸的插画」。
+   */
+  const PAPERCUT_GRAMMAR = {
+    yinYang: "阳刻线线相连、阴刻块面点缀",
+    motifs: ["锯齿纹", "月牙纹", "如意云纹", "朵花纹", "水波纹"]
+  };
+
   const CRAFT_BRIEF = {
-    papercut: { name: "剪纸", material: "红纸镂空剪影，刀口利落", accent: "祥云纹镂空" }
+    papercut: {
+      name: "剪纸",
+      material: "红纸镂空剪影，" + PAPERCUT_GRAMMAR.yinYang + "，刀口利落",
+      accent: "以锯齿纹与如意云纹收边"
+    }
   };
 
   /** 本地兜底：按线条特征联想一个具象意象 */
@@ -651,7 +665,7 @@
       "一撇一捺可能是冲破束缚的翅膀，可化作展翅的纸鸢。",
       "必须给出具象的自然或人文意象（飞天、瑞兽、游鱼、兰花、水波纹、纸鸢、仙鹤、螭龙、云气、莲、牡丹之类），",
       "绝不能只描述线条本身。",
-      "唯一工艺：" + (meta.short || "剪纸") + "（红纸镂空、刀口利落，以锯齿纹与云纹收边）。",
+      "唯一工艺：" + (meta.short || "剪纸") + "（红纸镂空，阳刻线线相连、阴刻块面点缀，以锯齿纹与如意云纹收边）。",
       "请把意象想成一张能真正剪出来的红纸：轮廓连贯、镂空可透光、细碎笔触收拢成连续刀路。",
       "",
       // 三层融合硬约束：内容 / 文化 / 工艺（《方案.docx》），
@@ -726,17 +740,21 @@
       .filter((t) => t.fromRule).slice(0, 2).map((t) => t.motif) : [];
     const emotion = String(a.emotionTheme || "").slice(0, 8);
 
-    const must = "中国" + b.name + "：" + p.imagery + "，" + b.material + "，" + b.accent +
+    // 智谱官方提示词结构：主体 + 媒介 + 颜色 + 情绪 + 构图，用具体视觉描述而非抽象概念。
+    // 图生图时模型已能看到原画，提示词侧重「工艺转译指令 + 纹样语汇」，仍回灌主色与构图强化贴合。
+    const must = "中国民间" + b.name + "，" + p.imagery + "，" + b.material + "，" + b.accent +
       (palette ? "，主色" + palette : "");
     const extra = [];
     if (anchors.length) extra.push("保留" + anchors.join("、"));
     if (ruleMotifs.length) extra.push(ruleMotifs.join("、"));
+    // 文献转译没给出纹样名时，用剪纸基础纹饰补齐非遗语汇，避免画面「无纹样」
+    else extra.push("纹样" + PAPERCUT_GRAMMAR.motifs.slice(0, 2).join("、"));
     if (emotion) extra.push(emotion);
     if (mood) extra.push(mood);
     if (layout) extra.push("构图" + layout);
     let prompt = must;
     extra.forEach((x) => {
-      if (prompt.length + x.length + 1 <= 108) prompt += "，" + x;
+      if (prompt.length + x.length + 1 <= 120) prompt += "，" + x;
     });
     prompt += "，大面积留白，无文字";
 
@@ -767,20 +785,38 @@
     return parts.join("——");
   }
 
-  /** 按蓝图调用图像模型，生成整幅非遗作品底图 */
-  async function craftRedraw(style, blueprint, analysis, report) {
+  /**
+   * 按蓝图调用图像模型，生成整幅非遗作品底图。
+   * refImageBase64：用户原画（方形合成稿）的 dataURL。提供时走图生图——
+   * 免费模型 cogview-3-flash 也接受 image_url 参考图（已实测会参考原画布局与色彩），
+   * 让 AI 真正「看到」原画再重构，而非只靠文字回灌骨架。
+   */
+  async function craftRedraw(style, blueprint, analysis, report, refImageBase64) {
     const bp = blueprint || {};
     const prompt = bp.prompt || (CRAFT_BRIEF[style] || CRAFT_BRIEF.papercut).name + "：一枝牡丹，红纸镂空，大面积留白，无文字";
-
-    const data = await call("/images/generations", {
+    const payload = {
       model: AI.imageModel || "cogview-3-flash",
       prompt,
       size: "1024x1024"
-    }, 90000, "image");
+    };
+    if (refImageBase64) payload.image_url = refImageBase64;
 
-    const url = data && data.data && data.data[0] && data.data[0].url;
-    if (!url) throw new Error("图像模型未返回图片");
-    return url;
+    try {
+      const data = await call("/images/generations", payload, 90000, "image");
+      const url = data && data.data && data.data[0] && data.data[0].url;
+      if (!url) throw new Error("图像模型未返回图片");
+      return url;
+    } catch (e) {
+      // 图生图被拒（如参考图过大 / 参数不被接受）时，退回纯文生图再试一次；
+      // 致命错误（余额不足 / Key 无效）不再重试，避免一次故障被放大成多次扣费。
+      if (refImageBase64 && !isFatal(e)) {
+        delete payload.image_url;
+        const data = await call("/images/generations", payload, 90000, "image");
+        const url = data && data.data && data.data[0] && data.data[0].url;
+        if (url) return url;
+      }
+      throw e;
+    }
   }
 
   function blobToDataURL(blob) {
