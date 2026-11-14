@@ -1,10 +1,10 @@
 /* 心绘非遗 · 前端配置 */
 window.XHFY_CONFIG = {
   ai: {
-    // 图鉴/视觉请求走智谱国际站 api.z.ai：同一把 Key、同一套模型，
-    // 但它的 OPTIONS 预检会正常返回 Access-Control-Allow-Origin / -Methods / -Headers，
-    // 浏览器可以直接 fetch(application/json)，无需任何中继。
-    // （国内站 www.bigmodel.cn 的预检不返回 CORS 头，只有 POST 响应才带，浏览器必然被拦。）
+    // 图鉴/视觉请求走智谱国际站 api.z.ai：同一把 Key、同一套模型。
+    // 注意：/chat/completions 必须带尾斜杠（"/chat/completions/"），
+    // 否则 OPTIONS 预检不返回 CORS 头，浏览器会拦成「Failed to fetch」。
+    // 该修正已在 ai.js 的 call() 里统一处理，勿删。
     base: "https://api.z.ai/api/paas/v4",
     // 备用端点：国际站网络不通时回退国内站（仅在内网/代理放行直连的环境下有效）。
     baseFallback: "https://www.bigmodel.cn/api/paas/v4",

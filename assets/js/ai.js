@@ -156,6 +156,12 @@
   }
 
   async function call(path, payload, timeout, kind) {
+    // CORS 修复：智谱 /chat/completions 在不带尾斜杠时，OPTIONS 预检
+    // 不返回 Access-Control-Allow-*，浏览器会把请求拦成「Failed to fetch」
+    // （表现为「AI 不可用」）。补上尾斜杠后 CDN 才正常回 CORS 头，实测直连可用。
+    // /images/generations 本身预检正常，保持原样。
+    if (path === "/chat/completions") path = "/chat/completions/";
+
     // 熔断优先：已经判定不可用时，连请求都不发，避免每次都白扣一次
     if (tripped) throw new Error("AI 已暂停：" + tripped);
     const blocked = checkBudget(kind || "text");
