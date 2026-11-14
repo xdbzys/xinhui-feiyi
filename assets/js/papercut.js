@@ -270,11 +270,21 @@
     const strokeR = Math.max(3, Math.round(S * 0.0042));
     const thick = dilate(ink, W, H, strokeR);
     const outside = markOutside(thick, W, H);
-    const enclosed = new Uint8Array(S * S);
-    let enclosedCount = 0;
+
+    // 手画的圈几乎不会严丝合缝。额外收拢一圈再判「是否围合」，
+    // 让收笔处十几二十像素的缺口也能被认成闭合；随后把内部区域膨胀回原位，
+    // 既不改变可见线宽，也不会在笔迹与红面之间留白缝。
+    const sealR = Math.max(4, Math.round(S * 0.006));
+    const sealed = dilate(thick, W, H, sealR);
+    const outsideSealed = markOutside(sealed, W, H);
+    const enclosedSealed = new Uint8Array(S * S);
     for (let i = 0; i < S * S; i++) {
-      if (!thick[i] && !outside[i]) { enclosed[i] = 1; enclosedCount++; }
+      if (!sealed[i] && !outsideSealed[i]) enclosedSealed[i] = 1;
     }
+    const enclosed = dilate(enclosedSealed, W, H, sealR);
+    let enclosedCount = 0;
+    for (let i = 0; i < S * S; i++) if (enclosed[i]) enclosedCount++;
+
     const body = new Uint8Array(S * S);
     for (let i = 0; i < S * S; i++) body[i] = thick[i] || enclosed[i] ? 1 : 0;
 
