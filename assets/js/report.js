@@ -361,6 +361,188 @@
     return "难以判断：落笔过少，建议多画几笔再读";
   }
 
+  /* ---------------- 六层心灵图鉴 ---------------- */
+  // 严格遵循：先客观观测，再投射解读；依托文献知识库，不凭空编造；
+  // 语言中立包容鼓励，不出具医学/精神病/心理疾病确诊结论。
+
+  /** 第一层：画面客观观测记录 —— 只描述可见事实，不下心理结论 */
+  function layerObservation(analysis) {
+    const m = analysis.metrics;
+    const htp = analysis.htp || {};
+    const p = analysis.process || {};
+    const s = analysis.scores;
+    const facts = [];
+    facts.push("画面笔墨覆盖约 " + Math.round(m.coverage * 100) + "%，留白约 " + s.space + "%；主体包围盒约占画面 " + Math.round(m.bboxRatio * 100) + "%。");
+    facts.push("画面位置：" + analysis.placement + "，横向" + htp.horizBias + "、纵向" + htp.vertBias + "；大小判定为「" + htp.sizeBias + "」。");
+    facts.push("线条特征：" + analysis.lineStyle + "，主方向「" + htp.lineDirection + "」，笔触" + htp.pressure + "；是否有反复涂抹：" + (htp.repeated ? "是" : "否") + "。");
+    facts.push("色彩：" + analysis.colorStyle + "，主色为 " + ((analysis.dominantColors || []).slice(0, 3).map((c) => c.name).join("、") || "无明显主色") + "；共用 " + (p.distinctColors || 0) + " 种颜色。");
+    if (htp.cutoff && htp.cutoff !== "未切断") facts.push("画面边缘：" + htp.cutoff + "。");
+    facts.push("作画过程：落笔约 " + Math.max(1, Math.round(p.activeSec || 0)) + " 秒，共 " + (p.strokes || 0) + " 笔，停顿 " + (p.pauses || 0) + " 次，撤销/擦除 " + (p.changes || 0) + " 次。");
+    return {
+      title: "画面客观观测记录",
+      subtitle: "仅记录画面可见事实，不做心理结论",
+      items: facts
+    };
+  }
+
+  /** 第二层：个性与自我认知解读 —— 依托 Koch 树木 / Machover 画人 / HTP 框架 */
+  function layerPersonality(analysis) {
+    const s = analysis.scores;
+    const htp = analysis.htp || {};
+    const p = analysis.process || {};
+    const parts = [];
+    // 自我力量（画面大小 + 笔触力度 + 线条质量）
+    const ego = s.egoStrength || 50;
+    parts.push("自我力量 " + ego + "/100：" +
+      (ego >= 65 ? "画面占比与笔触力度显示你愿意占据空间、用得上力气" :
+       ego <= 38 ? "画面偏小或笔触偏轻，你把自己收得比较紧" :
+       "力量在那里，只是还没完全拿出来"));
+    // 线条与控制
+    if (analysis.lineStyle === "细密锋利") parts.push("线条细密锋利，显示对事物有较高的专注度，有时也容易把自己绷得太紧。");
+    else if (analysis.lineStyle === "柔和晕染") parts.push("笔触柔和晕染，你允许事情模糊一点，这份松弛本身是一种资源。");
+    else parts.push("线条疏朗克制，你在控制与放手之间找到了相对舒服的位置。");
+    // 画面大小
+    if (htp.sizeBias === "画面过大") parts.push("整体画得比较满，自我存在感较强，表达外放，情感浓度高。");
+    else if (htp.sizeBias === "画面偏小") parts.push("整体画得比较小，表达有些克制，可能对环境比较谨慎。");
+    else parts.push("画面大小适中，自我评价相对适度，心态比较均衡。");
+    // 反复涂抹 = 对该区域在意
+    if (htp.repeated) parts.push("有些地方你来回涂了好几遍——反复出现的地方，往往藏着你最想安放的东西。");
+    return {
+      title: "个性与自我认知",
+      subtitle: "基于 Koch 树木人格测验、Machover 画人测验的「大小-力度-线条」迁移解读",
+      items: parts
+    };
+  }
+
+  /** 第三层：情绪状态信号解析 —— 依托色彩心理学与线条张力 */
+  function layerEmotion(analysis) {
+    const s = analysis.scores;
+    const m = analysis.metrics;
+    const htp = analysis.htp || {};
+    const parts = [];
+    // 情绪温度
+    parts.push("情绪温度 " + s.warmth + "/100：" +
+      (s.warmth >= 60 ? "心里还有温度，愿意靠近让你舒服的东西" :
+       s.warmth <= 40 ? "情绪的温度被调得比较低，像把自己收进了一件薄外套" :
+       "温度不远不近，你还在试探"));
+    // 内在张力
+    parts.push("内在张力 " + s.tension + "/100：" +
+      (s.tension >= 62 ? "线条偏紧、边缘清晰，身体可能还替你绷着什么" :
+       s.tension <= 38 ? "笔触相对松弛，整体是松的，允许事情慢一点" :
+       "有一点紧也有一点松，张力刚好"));
+    // 生命活力
+    parts.push("生命活力 " + s.vitality + "/100：" +
+      (s.vitality >= 62 ? "色彩与覆盖度都在，生命力仍在流动" :
+       s.vitality <= 42 ? "颜色收得很轻，能量偏低，需要被温和地补一补" :
+       "力气不多不少，刚刚好"));
+    // 色彩冷暖
+    if (m.coolRatio > m.warmRatio + 0.12) parts.push("冷色占比更高，蓝与灰会把情绪放低、放慢——这不一定是低落，有时是在替自己降温。");
+    else if (m.warmRatio > m.coolRatio + 0.12) parts.push("暖色从画面里透出来，你似乎在画里为自己留了一盏灯。");
+    else parts.push("冷暖在画面里交替出现，你一边想要安定，一边又保留着向外走的力气。");
+    return {
+      title: "情绪状态信号",
+      subtitle: "基于色彩心理学（冷暖/饱和度）与笔触张力的情绪信号解析",
+      items: parts
+    };
+  }
+
+  /** 第四层：人际关系、家庭投射 —— 依托 HTP 房部与中学生绘画心理应用手册 */
+  function layerRelation(analysis, vision) {
+    const s = analysis.scores;
+    const m = analysis.metrics;
+    const htp = analysis.htp || {};
+    const v = vision || {};
+    const parts = [];
+    const seen = ((v.elements || []).join("") + (v.scene || "")).trim();
+    // 秩序感与人际
+    parts.push("秩序感 " + s.order + "/100：" +
+      (s.order >= 64 ? "画面有秩序，你在试着把事放回位置" :
+       s.order <= 38 ? "结构自由，你不愿被规则框住" :
+       "有秩序，也留了自由的缝隙"));
+    // 扎根感与家庭/安全
+    parts.push("扎根感 " + s.grounded + "/100：" +
+      (s.grounded >= 64 ? "你给画面留了一个可以站住的地方，内在有相对稳定的支点" :
+       s.grounded <= 38 ? "重心有点飘，你还在寻找一个能踩住的地方" :
+       "不算飘，也还没完全落地"));
+    // 画面位置与人际倾向
+    if (htp.horizBias === "偏左") parts.push("横向重心偏左，可能更内省、从已有经验中汲取力量，与人交往时偏谨慎。");
+    else if (htp.horizBias === "偏右") parts.push("横向重心偏右，更面向未来、外向，期待与外界建立连接。");
+    else parts.push("横向重心居中，能同时容纳内在与外界。");
+    // 若有房子/窗/门等元素，补充家庭投射
+    if (seen && /屋|房|家|窗|门/.test(seen)) {
+      parts.push("画面出现了房屋/门窗类元素。在 HTP 框架中，房子常投射家庭关系与安全感：门的大小象征对外界的开放程度，窗象征沟通媒介。若门窗较大，可能更愿意与外界连接；若偏小或紧闭，可能更需要私密空间与边界。");
+    }
+    return {
+      title: "人际关系与家庭投射",
+      subtitle: "基于 HTP 房部（家庭/安全感/沟通）与《中学生绘画心理应用手册》人际章节",
+      items: parts
+    };
+  }
+
+  /** 第五层：内在期待与心理资源 —— 多挖掘积极心理力量 */
+  function layerResources(analysis) {
+    const s = analysis.scores;
+    const parts = [];
+    // 完形程度
+    parts.push("完形程度 " + s.completeness + "/100：" +
+      (s.completeness >= 64 ? "内在有一个中心在收拢，整体感在形成，这是自我整合的积极信号" :
+       s.completeness <= 38 ? "能量还在弥散，但你已经开始用画笔去组织它，这本身就是力量" :
+       "有聚拢的苗头，也留了散开的余地"));
+    // 视觉平衡
+    parts.push("视觉平衡 " + s.visualBalance + "/100：" +
+      (s.visualBalance >= 64 ? "画面重量分布相对均匀，内在相对稳定，能容纳不同方向的拉力" :
+       s.visualBalance <= 38 ? "重量偏向一侧，有一股拉力在起作用——你能意识到它，就已经在调整" :
+       "大体平衡，某一方向略占上风"));
+    // 积极面挖掘
+    const strengths = [];
+    if (s.vitality >= 60) strengths.push("你还愿意用颜色，这本身就是生命力");
+    if (s.grounded >= 60) strengths.push("你给画面留了可以站住的地方，那种「脚踩在地上」的感觉会帮你度过摇晃的时刻");
+    if (s.order >= 60) strengths.push("你在不确定里仍然画出了秩序，那些重复的线、靠近中心的形状，都是你内在的稳定器");
+    if (s.warmth >= 55) strengths.push("画面里有温度，你仍愿意靠近让你舒服的东西");
+    if (s.completeness >= 55) strengths.push("内在有一个核心在组织经验，整体感正在形成");
+    if (!strengths.length) strengths.push("你愿意停下来画一幅画，这件事本身，就是你在照顾自己");
+    parts.push("你身上的心理资源：" + strengths.join("；") + "。");
+    return {
+      title: "内在期待与心理资源",
+      subtitle: "聚焦积极心理力量，看见你已经拥有的资源",
+      items: parts
+    };
+  }
+
+  /** 第六层：友好提示 + 免责声明 */
+  function layerTips(analysis) {
+    const s = analysis.scores;
+    const parts = [];
+    // 友好提示
+    parts.push(whisperOf(analysis));
+    // 替代解读
+    parts.push("也可以换个方向看：" + alternativeOf(analysis));
+    // 信息充分度
+    const p = analysis.process || {};
+    const enough = (p.strokes || 0) >= 5 && analysis.metrics.coverage > 0.025;
+    if (!enough) {
+      parts.push("提示：本次绘画素材信息有限（笔触较少），以上分析仅供浅度参考；如果画得更丰富一些，解读会更有依据。");
+    }
+    // 免责声明（必须保留原文）
+    parts.push("免责声明：本分析仅基于绘画投射艺术心理学，不能等同于专业心理测评，若存在心理困扰建议寻求线下心理咨询师帮助。");
+    return {
+      title: "友好提示与免责声明",
+      subtitle: "温柔的提醒与必要的边界",
+      items: parts
+    };
+  }
+
+  function buildLayers(analysis, vision) {
+    return [
+      layerObservation(analysis),
+      layerPersonality(analysis),
+      layerEmotion(analysis),
+      layerRelation(analysis, vision),
+      layerResources(analysis),
+      layerTips(analysis)
+    ];
+  }
+
   function makeFallbackReport(analysis, userText, vision, forcedStyle) {
     const v = vision || {};
     const archetype = archetypeOf(analysis);
@@ -423,7 +605,9 @@
         layout: (v.layout || ""),
         colors: (v.dominantColors && v.dominantColors.length) ? v.dominantColors : names
       },
-      source: "local"
+      source: "local",
+      // 六层心灵图鉴：客观观测 → 个性自我 → 情绪信号 → 人际家庭 → 心理资源 → 提示免责
+      layers: buildLayers(analysis, v)
     };
   }
 
@@ -564,6 +748,7 @@
     dateText,
     reportNo,
     GUIDES,
-    archetypeOf
+    archetypeOf,
+    buildLayers
   };
 })();

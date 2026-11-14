@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，由你确认画里的情绪意象，再把视觉锚点转译成有出处的传统剪纸纹样，生成可放大绘制、可打印剪裁的非遗剪纸图样与心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=c2d7e83">
+<link rel="stylesheet" href="assets/css/style.css?v=f4a91e7">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -394,6 +394,13 @@
               <div><dt>适合手作</dt><dd id="craftUse">剪纸 / 窗花 / 帆布袋印花</dd></div>
             </dl>
             <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
+            <div class="innovation-picker" id="innovationPicker" role="group" aria-label="剪纸创新度档位">
+              <span class="ip-label">创新度</span>
+              <button class="ip-btn" data-innovation="low" type="button">低</button>
+              <button class="ip-btn active" data-innovation="medium" type="button">中（推荐）</button>
+              <button class="ip-btn" data-innovation="high" type="button">高</button>
+              <em class="ip-hint" id="innovationHint">主体骨架不变，内部丰富镂空纹样，搭配规范剪纸边框，兼顾识别度与剪纸美感</em>
+            </div>
             <div class="craft-actions">
               <button id="aiRedraw" class="btn btn-primary" type="button"><span>生成剪纸锚定稿</span><i>✦</i></button>
               <button id="downloadPattern" class="btn btn-ghost" type="button">下载打印级图样 · 2048px</button>
@@ -594,36 +601,14 @@
         <div class="report-caveat" id="reportCaveat" hidden></div>
       </section>
 
-      <section class="report-section">
-        <h3><span>01</span>色彩的语言</h3>
-        <p id="reportColor"></p>
-        <div class="report-palette" id="reportPalette"></div>
-      </section>
-
-      <section class="report-section">
-        <h3><span>02</span>线条与张力</h3>
-        <p id="reportLine"></p>
-      </section>
-
-      <section class="report-section">
-        <h3><span>03</span>空间与留白</h3>
-        <p id="reportSpace"></p>
-      </section>
-
-      <section class="report-section report-dynamics">
-        <h3><span>03B</span>完形与视觉动力</h3>
-        <p class="report-dynamics-note">本板块综合 Jung 曼陀罗理论（自性化/中心性/四象限/完形）、Arnheim《艺术与视知觉》视觉动力（重心/平衡/运动）、Koch 树木与 Machover 画人测验的「画面大小-笔触力度-自我力量」逻辑，对抽象涂画做迁移解读。</p>
-        <p id="reportDynamics"></p>
-      </section>
-
-      <section class="report-section">
-        <h3><span>04</span>作画过程印记</h3>
-        <p id="reportProcess"></p>
-        <div class="report-process" id="reportProcessChips"></div>
+      <section class="report-section report-layers">
+        <h3><span>04</span>六层心灵图鉴</h3>
+        <p class="report-feats-note">严格遵循「先客观观测、再投射解读」的顺序，依托《心理画》《中学生绘画心理应用手册》《色彩心理学》等文献知识库；仅作绘画投射倾向参考，不作心理疾病确诊。</p>
+        <div id="reportLayers"></div>
       </section>
 
       <section class="report-section report-prescription">
-        <h3><span>05</span>此刻心情与心象处方</h3>
+        <h3><span>05</span>心象处方</h3>
         <p id="reportMood"></p>
         <div class="report-rx">
           <h4 id="reportRegName"></h4>
@@ -715,16 +700,16 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=c2d7e83"></script>
-<script src="assets/js/paint.js?v=c2d7e83"></script>
-<script src="assets/js/analyze.js?v=c2d7e83"></script>
-<script src="assets/js/craft.js?v=c2d7e83"></script>
-<script src="assets/js/knowledge.js?v=c2d7e83"></script>
-<script src="assets/js/heritage.js?v=c2d7e83"></script>
-<script src="assets/js/motifdb.js?v=c2d7e83"></script>
-<script src="assets/js/papercut.js?v=c2d7e83"></script>
-<script src="assets/js/ai.js?v=c2d7e83"></script>
-<script src="assets/js/report.js?v=c2d7e83"></script>
-<script src="assets/js/app.js?v=c2d7e83"></script>
+<script src="assets/js/config.js?v=f4a91e7"></script>
+<script src="assets/js/paint.js?v=f4a91e7"></script>
+<script src="assets/js/analyze.js?v=f4a91e7"></script>
+<script src="assets/js/craft.js?v=f4a91e7"></script>
+<script src="assets/js/knowledge.js?v=f4a91e7"></script>
+<script src="assets/js/heritage.js?v=f4a91e7"></script>
+<script src="assets/js/motifdb.js?v=f4a91e7"></script>
+<script src="assets/js/papercut.js?v=f4a91e7"></script>
+<script src="assets/js/ai.js?v=f4a91e7"></script>
+<script src="assets/js/report.js?v=f4a91e7"></script>
+<script src="assets/js/app.js?v=f4a91e7"></script>
 </body>
 </html>

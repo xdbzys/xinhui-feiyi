@@ -14,6 +14,10 @@
     vision: null,
     report: null,
     craftStyle: "papercut",
+    // 剪纸创新度档位：low / medium(默认) / high
+    // 低：仅少量内部镂空+角花，主体轮廓改动极小；中：骨架不变+丰富镂空+规范边框；
+    // 高：轮廓保留识别特征，内部大面积纹样重构，线条大量转译。
+    innovationLevel: "medium",
     aiImageURL: "",
     aiBaseStyle: "",
     aiComposed: false,
@@ -546,6 +550,11 @@
     if (!out.guide.mantra) out.guide.mantra = fallback.guide.mantra;
     if (!out.guide.intro) out.guide.intro = fallback.guide.intro;
     out.vision = Object.assign({}, fallback.vision, ai && ai.vision);
+    // 六层心灵图鉴：AI 若提供则用 AI 的，否则用本地确定性生成的六层
+    const aiLayers = ai && Array.isArray(ai.layers) && ai.layers.length === 6 ? ai.layers : null;
+    out.layers = aiLayers || (fallback.layers && fallback.layers.length === 6
+      ? fallback.layers
+      : window.XHFYReport.buildLayers(state.analysis, state.vision));
     return out;
   }
 
@@ -704,8 +713,11 @@
     if (p.distinctColors) chips.push(p.distinctColors + " 种颜色");
     if (p.pauses) chips.push(p.pauses + " 次停顿");
     $("#processChips").innerHTML = chips.map((t) => "<span>" + escapeHTML(t) + "</span>").join("");
-    $("#reportProcess").textContent = r.process;
-    $("#reportProcessChips").innerHTML = (b.details || []).map((d) =>
+    // 作画过程印记已整合进六层心灵图鉴（第一层客观观测），#reportProcess 已移除
+    const rpEl = $("#reportProcess");
+    if (rpEl) rpEl.textContent = r.process;
+    const rpcEl = $("#reportProcessChips");
+    if (rpcEl) rpcEl.innerHTML = (b.details || []).map((d) =>
       "<span><b>" + escapeHTML(d.label) + "</b>" + escapeHTML(d.hint) + "</span>").join("");
     $("#reportMood").textContent = r.mood;
 
@@ -732,17 +744,32 @@
     // 图鉴
     $("#reportArchetype").textContent = "「" + (r.archetype || r.title) + "」";
     $("#reportSummary").textContent = r.summary;
-    $("#reportColor").textContent = r.colors;
-    $("#reportLine").textContent = r.lines;
-    $("#reportSpace").textContent = r.space;
+    // 色彩/线条/空间/完形板块已整合进「六层心灵图鉴」，这里仅保留色板
     const dynEl = $("#reportDynamics");
     if (dynEl) dynEl.textContent = r.dynamics || "";
     $("#reportDate").textContent = window.XHFYReport.dateText();
     $("#reportNo").textContent = window.XHFYReport.reportNo();
     $("#reportDrawing").src = a.imageDataURL;
     $("#reportRadar").innerHTML = window.XHFYReport.radarSVG(a.scores, { dark: false, size: 280 });
-    $("#reportPalette").innerHTML = (a.dominantColors || [])
+    const palEl = $("#reportPalette");
+    if (palEl) palEl.innerHTML = (a.dominantColors || [])
       .map((c) => '<i style="background:' + c.hex + '" title="' + c.name + '"></i>').join("");
+
+    // 六层心灵图鉴渲染
+    const layersEl = $("#reportLayers");
+    if (layersEl && Array.isArray(r.layers) && r.layers.length) {
+      layersEl.innerHTML = r.layers.map((layer, i) => {
+        const num = String(i + 1).padStart(2, "0");
+        const items = (layer.items || []).map((it) => "<li>" + escapeHTML(it) + "</li>").join("");
+        return '<div class="report-layer">' +
+          '<div class="report-layer-head"><span class="layer-num">' + num + '</span>' +
+          '<h4>' + escapeHTML(layer.title || "") + '</h4>' +
+          (layer.subtitle ? '<em>' + escapeHTML(layer.subtitle) + '</em>' : '') +
+          '</div>' +
+          '<ul class="report-layer-items">' + items + '</ul>' +
+          '</div>';
+      }).join("");
+    }
     $("#reportTags").innerHTML = tags.slice(0, 7).map((t) => "<span>" + escapeHTML(t) + "</span>").join("");
     $("#reportCraftReason").textContent = r.craft.reason;
     $("#reportCraftName").textContent = meta.name;
@@ -1209,9 +1236,12 @@
     }, 0);
 
     const cornerCount = res.provenance.filter((p) => p.role === "四角压角").length;
+    const st = res.stats || {};
+    const innLabel = { low: "低创新", medium: "中等创新", high: "高创新" }[st.innovation] || "中等创新";
     $("#anchorSummary").textContent =
-      "主体 = 你的笔迹（原样保留、不重画）；装饰 = 剪纸素材库。" +
-      "本次在 " + (holeCount || 0) + " 处主体内部做了镂空，在 " +
+      "创新度：" + innLabel + "。主体 = 你的笔迹（原样保留、不重画）；装饰 = 剪纸素材库。" +
+      "本次在 " + (holeCount || 0) + " 处主体内部做了镂空，" +
+      "线条转译 " + (st.linePlaced || 0) + " 处，间隙点缀 " + (st.gapPlaced || 0) + " 处，" +
       cornerCount + " 个边角压了角花，整幅连通为一片，可直接下剪。";
 
     $("#anchorTotal").textContent = c.total;
@@ -1305,7 +1335,7 @@
 
     loaderText.textContent = "检索纹样库，为主体内部与四角匹配单元…";
     await nextFrame();
-    const res = window.XHFYPapercut.compose(studio, { size: COMPOSE_SIZE, tags: tags, imagery: bp && bp.imagery });
+    const res = window.XHFYPapercut.compose(studio, { size: COMPOSE_SIZE, tags: tags, imagery: bp && bp.imagery, innovation: state.innovationLevel });
     if (!res) throw new Error("没有读到可用的笔迹，请先把画补完整");
     return { res, bp };
   }
@@ -1466,6 +1496,22 @@
     $("#aiRedraw").addEventListener("click", generateAiCraft);
     $("#aiCraftEmptyBtn").addEventListener("click", generateAiCraft);
 
+    // 创新度档位切换：低/中/高，切换后需要重新生成才生效
+    const innHints = {
+      low: "纹样少，仅少量内部镂空 + 四角角花，主体轮廓改动极小，优先保证辨识度",
+      medium: "主体骨架不变，内部丰富镂空纹样，搭配规范剪纸边框，兼顾识别度与剪纸美感",
+      high: "主体轮廓保留识别特征，内部大面积用剪纸纹样重构，线条大量转译，装饰感更强"
+    };
+    $$("#innovationPicker .ip-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const v = b.dataset.innovation;
+        state.innovationLevel = v;
+        $$("#innovationPicker .ip-btn").forEach((x) => x.classList.toggle("active", x === b));
+        const hint = $("#innovationHint");
+        if (hint) hint.textContent = innHints[v] || "";
+      });
+    });
+
     $("#toCraftBtn").addEventListener("click", () => scrollToEl("#step3"));
     $("#toGuide").addEventListener("click", () => scrollToEl("#step4"));
   }
@@ -1500,7 +1546,7 @@
     // 剪纸：打印级图样也走锚定引擎，原分辨率重算而不是把 1024 放大
     if (style === "papercut" && window.XHFYPapercut) {
       const tags = state.report && state.report.archetype ? [state.report.archetype] : [];
-      const res = window.XHFYPapercut.compose(studio, { size: s, tags: tags });
+      const res = window.XHFYPapercut.compose(studio, { size: s, tags: tags, innovation: state.innovationLevel });
       if (res) return res.dataURL;
     }
 
