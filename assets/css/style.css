@@ -2532,6 +2532,90 @@ a { color: inherit; }
   background: var(--paper-light);
   border-radius: 2px;
 }
+
+/* ---- 原画锚定报告 ---- */
+.anchor-panel {
+  margin: 16px 0 4px;
+  padding: 20px 22px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, var(--paper-light), var(--paper-warm));
+  border-radius: 2px;
+}
+.anchor-panel .lang-no {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--ink-mute);
+}
+.anchor-panel h4 {
+  margin: 8px 0 6px;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 500;
+}
+.anchor-panel .micro { margin: 0 0 14px; font-size: 10.5px; line-height: 1.8; color: var(--ink-mute); }
+.anchor-score {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.anchor-score > strong {
+  font-family: var(--serif);
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 500;
+  color: var(--red);
+}
+.anchor-score > strong::after {
+  content: "分";
+  font-size: 11px;
+  color: var(--ink-mute);
+  margin-left: 3px;
+}
+.anchor-score > div > span { font-size: 10px; letter-spacing: 0.08em; color: var(--ink-mute); }
+.anchor-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.anchor-metrics li { font-size: 10.5px; color: var(--ink-soft); }
+.anchor-metrics b { font-weight: 600; color: var(--ink); }
+.anchor-sub {
+  margin: 16px 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  color: var(--ink-mute);
+}
+.anchor-units { margin: 0; padding-left: 18px; }
+.anchor-units li {
+  font-size: 10.5px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+  padding: 3px 0;
+}
+.anchor-units li b { font-weight: 600; color: var(--ink); }
+.anchor-units li em {
+  font-style: normal;
+  display: block;
+  font-size: 9.5px;
+  color: var(--ink-mute);
+}
+.anchor-keep {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 10px;
+  line-height: 1.85;
+  color: var(--ink-mute);
+}
+.anchor-keep b { color: var(--ink-soft); font-weight: 600; }
 .heritage-card .lang-no {
   display: block;
   font-size: 9px;

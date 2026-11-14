@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，由你确认画里的情绪意象，再把视觉锚点转译成有出处的传统剪纸纹样，生成可放大绘制、可打印剪裁的非遗剪纸图样与心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=f2b8e1a">
+<link rel="stylesheet" href="assets/css/style.css?v=b1a9f4d">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -360,7 +360,7 @@
         <div>
           <p class="kicker">STEP 03 · 非遗重构</p>
           <h2>让心里的风景，长成一件非遗</h2>
-          <p class="lead">你的画可能很简单，但 AI 不会直接把它贴上去。系统先读懂构图与元素，再用生成式模型二创成细节完整的剪纸纹样，最后把你的原笔迹轻轻叠回画面。本版只保留剪纸一门工艺，把「读懂 → 转译 → 真的能剪出来」这一条路走完整。</p>
+          <p class="lead">你的原画不会被整幅重画。系统先读出它的主体、构图与笔迹走向，把这些原样保留成红纸阳刻主体；再从剪纸纹样库里检索拆解好的云纹、卷草、角花与边饰，只用来补内部镂空、填间隙与压四角。每一件成品都附纹样出处与原画关联度。</p>
         </div>
       </div>
 
@@ -375,13 +375,13 @@
 
         <div class="craft-stage">
           <div class="craft-frame">
-            <img id="aiCraftImg" alt="AI 二创非遗作品" hidden>
+            <img id="aiCraftImg" alt="剪纸锚定稿" hidden>
             <canvas id="aiInkOverlay" aria-hidden="true" hidden></canvas>
             <span class="craft-badge" id="craftBadge">非遗剪纸</span>
-            <div class="craft-loading" id="craftLoading" hidden><i></i><span>AI 正在重绘纹样…</span></div>
+            <div class="craft-loading" id="craftLoading" hidden><i></i><span>正在读取你的原画…</span></div>
             <div class="ai-craft-empty" id="aiCraftEmpty">
-              <p>AI 会先读懂你线条里的潜意识，联想出一个具象意象，再用繁复的非遗纹样补满线条之间的空白，整幅重构为一件展品，最后把你的原笔迹轻轻叠回作为骨架。</p>
-              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">生成 AI 非遗二创</button>
+              <p>你的笔迹就是剪纸的骨架：系统先把线条加粗成红纸主体，笔迹围出的封闭区域按形状检索纹样库镂空成花，四角与间隙只用角花、卷草、云纹补景。主体不会被替换，也不会被重画。</p>
+              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">生成剪纸锚定稿</button>
             </div>
           </div>
           <aside class="craft-info">
@@ -395,10 +395,30 @@
             </dl>
             <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
             <div class="craft-actions">
-              <button id="aiRedraw" class="btn btn-primary" type="button"><span>AI 二创当前工艺</span><i>✦</i></button>
+              <button id="aiRedraw" class="btn btn-primary" type="button"><span>生成剪纸锚定稿</span><i>✦</i></button>
               <button id="downloadPattern" class="btn btn-ghost" type="button">下载打印级图样 · 2048px</button>
             </div>
-            <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出 AI 读到的意象与工艺：它把你的线条当作主骨架，用祥云纹、缠枝纹、回字纹填满空白，再以该工艺的材质与光影成画。</p>
+            <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出这次引用了纹样库的哪些单元：你的线条被原样保留为主体，库里的角花、卷草、云纹只负责补内部镂空、填间隙与压四角。</p>
+
+            <!-- 原画锚定报告：纹样来源与原画关联度全部由本地引擎确定性计算，
+                 不依赖图像模型，因此 AI 不可用时依然完整可读。 -->
+            <div class="anchor-panel" id="anchorPanel" hidden>
+              <div class="anchor-head">
+                <span class="lang-no">ANCHORED COMPOSITION</span>
+                <h4>原画锚定报告</h4>
+                <p class="micro" id="anchorSummary"></p>
+              </div>
+              <div class="anchor-score">
+                <strong id="anchorTotal">—</strong>
+                <div>
+                  <span>原画关联度</span>
+                  <ul class="anchor-metrics" id="anchorMetrics"></ul>
+                </div>
+              </div>
+              <h5 class="anchor-sub">本次引用的纹样单元</h5>
+              <ol class="anchor-units" id="anchorUnits"></ol>
+              <div class="anchor-keep" id="anchorKeep"></div>
+            </div>
 
             <!-- 纹样溯源卡 + 原画关联度报告：由本地知识库确定性生成，
                  AI 不可用时同样完整可用，出处只取自《剪纸.pdf》。 -->
@@ -418,8 +438,8 @@
             </div>
 
             <div class="ai-art-meta" id="aiArtMeta" hidden>
-              <span id="aiArtTitle">AI 二创 · 保留原构图</span>
-              <a href="#" id="aiArtDownload" hidden>下载 AI 二创稿 ↓</a>
+              <span id="aiArtTitle">剪纸锚定稿 · 保留原构图</span>
+              <a href="#" id="aiArtDownload" hidden>下载剪纸锚定稿 ↓</a>
             </div>
             <button id="toGuide" class="link-btn" type="button">带着这张图样，进入心愈手作 →</button>
           </aside>
@@ -428,7 +448,7 @@
         <div class="mapping-row">
           <div class="mapping-step"><span>提取</span><p>识别画面元素、主色与笔迹走向</p></div>
           <div class="mapping-arrow">→</div>
-          <div class="mapping-step"><span>转译</span><p>AI 读出意象，用非遗纹样补满空白并整幅重构</p></div>
+          <div class="mapping-step"><span>转译</span><p>原笔迹保留为主体，库内纹样只补镂空与边角</p></div>
           <div class="mapping-arrow">→</div>
           <div class="mapping-step"><span>落地</span><p>输出可打印、可剪裁、可再创作的非遗底稿</p></div>
         </div>
@@ -695,14 +715,16 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=f2b8e1a"></script>
-<script src="assets/js/paint.js?v=f2b8e1a"></script>
-<script src="assets/js/analyze.js?v=f2b8e1a"></script>
-<script src="assets/js/craft.js?v=f2b8e1a"></script>
-<script src="assets/js/knowledge.js?v=f2b8e1a"></script>
-<script src="assets/js/heritage.js?v=f2b8e1a"></script>
-<script src="assets/js/ai.js?v=f2b8e1a"></script>
-<script src="assets/js/report.js?v=f2b8e1a"></script>
-<script src="assets/js/app.js?v=f2b8e1a"></script>
+<script src="assets/js/config.js?v=b1a9f4d"></script>
+<script src="assets/js/paint.js?v=b1a9f4d"></script>
+<script src="assets/js/analyze.js?v=b1a9f4d"></script>
+<script src="assets/js/craft.js?v=b1a9f4d"></script>
+<script src="assets/js/knowledge.js?v=b1a9f4d"></script>
+<script src="assets/js/heritage.js?v=b1a9f4d"></script>
+<script src="assets/js/motifdb.js?v=b1a9f4d"></script>
+<script src="assets/js/papercut.js?v=b1a9f4d"></script>
+<script src="assets/js/ai.js?v=b1a9f4d"></script>
+<script src="assets/js/report.js?v=b1a9f4d"></script>
+<script src="assets/js/app.js?v=b1a9f4d"></script>
 </body>
 </html>

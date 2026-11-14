@@ -18,6 +18,7 @@
     aiBaseStyle: "",
     aiComposed: false,
     aiBlueprint: null,
+    aiAnchor: null,
     // 已生成过的二创稿按工艺缓存，避免重复出图——图像按张计费 / 占免费额度，
     // 是全流程最贵的一步。单一工艺版仍保留这层缓存，供后续扩回多工艺时复用。
     craftCache: {},
@@ -362,6 +363,8 @@
         setTimeout(() => maybeCompanion(false), 1000);
       }
     });
+    // 调试出口：剪纸锚定引擎需要直接读取笔迹画布，便于离线复算与自检
+    window.__xhfyStudio = studio;
 
     // 调色盘
     const palette = $("#palette");
@@ -1084,7 +1087,7 @@
   }
 
   /** 未生成时的提示语；换工艺或重画后要把上一轮的意象解读清掉 */
-  const AI_NOTE_HINT = "生成后这里会写出 AI 读到的意象与工艺：它把你的线条当作主骨架，用祥云纹、缠枝纹、回字纹填满空白，再以该工艺的材质与光影成画。";
+  const AI_NOTE_HINT = "生成后这里会写出这次引用了纹样库的哪些单元：你的线条被原样保留为主体，库里的角花、卷草、云纹只负责补内部镂空、填间隙与压四角。";
 
   /** 把当前已生成的二创稿按工艺存入缓存，供切回来时复用 */
   function cacheAiArt(style) {
@@ -1092,7 +1095,8 @@
     state.craftCache[style] = {
       imageURL: state.aiImageURL,
       composed: state.aiComposed,
-      blueprint: state.aiBlueprint
+      blueprint: state.aiBlueprint,
+      anchor: state.aiAnchor
     };
   }
 
@@ -1110,6 +1114,7 @@
     state.aiImageURL = hit.imageURL;
     state.aiComposed = hit.composed;
     state.aiBlueprint = hit.blueprint;
+    state.aiAnchor = hit.anchor || null;
     state.aiBaseStyle = style;
 
     const img = $("#aiCraftImg");
@@ -1118,17 +1123,25 @@
     clearCssMask(img);
     applyAiPattern(hit.imageURL);
 
-    if (hit.composed) $("#aiInkOverlay").hidden = true;
+    if (hit.composed) { $("#aiInkOverlay").hidden = true; }
     else { paintInkOverlay(); $("#aiInkOverlay").hidden = false; }
 
-    $("#aiRedrawNote").textContent = bp.imagery
-      ? window.XHFYAI.craftReadout(bp) : AI_NOTE_HINT;
-    $("#aiArtTitle").textContent = "AI 二创 · " + (meta.short || style) +
-      (bp.imagery ? " · " + bp.imagery : "");
+    if (hit.anchor) {
+      $("#aiRedrawNote").textContent = anchorNote(hit.anchor, bp);
+      $("#aiArtTitle").textContent = "剪纸锚定稿" + (bp.imagery ? " · " + bp.imagery : "");
+      renderAnchorPanel(hit.anchor, bp);
+    } else {
+      hideAnchorPanel();
+      $("#aiRedrawNote").textContent = bp.imagery
+        ? window.XHFYAI.craftReadout(bp) : AI_NOTE_HINT;
+      $("#aiArtTitle").textContent = "AI 二创 · " + (meta.short || style) +
+        (bp.imagery ? " · " + bp.imagery : "");
+    }
 
     const dl = $("#aiArtDownload");
     dl.href = hit.imageURL;
-    dl.download = "心绘非遗_AI二创_" + (meta.short || style) + ".png";
+    dl.download = hit.anchor ? "心绘非遗_剪纸锚定稿.png"
+      : "心绘非遗_AI二创_" + (meta.short || style) + ".png";
     dl.hidden = false;
     if (hit.composed) { dl.removeAttribute("target"); dl.removeAttribute("rel"); }
     else { dl.target = "_blank"; dl.rel = "noopener"; }
@@ -1139,27 +1152,164 @@
     state.aiImageURL = "";
     state.aiBaseStyle = "";
     state.aiBlueprint = null;
+    state.aiAnchor = null;
     state.aiComposed = false;
     const img = $("#aiCraftImg");
     img.removeAttribute("src");
     clearCssMask(img);
     $("#aiInkOverlay").hidden = true;
+    hideAnchorPanel();
     applyAiPattern("");
     $("#aiRedrawNote").textContent = AI_NOTE_HINT;
-    $("#aiArtTitle").textContent = "AI 二创 · 保留原构图";
+    $("#aiArtTitle").textContent = "剪纸锚定稿 · 保留原构图";
     const dl = $("#aiArtDownload");
     dl.removeAttribute("href");
     dl.hidden = true;
   }
 
   function setAiButtons(loading) {
-    const label = loading ? "AI 二创中…" : "AI 二创当前工艺";
+    const label = loading ? "生成中…" : "生成剪纸锚定稿";
     const span = $("#aiRedraw").querySelector("span");
     if (span) span.textContent = label;
     else $("#aiRedraw").textContent = label;
     $("#aiRedraw").disabled = loading;
     $("#aiCraftEmptyBtn").disabled = loading;
   }
+
+  /* ---------------- 剪纸锚定链路 ---------------- */
+
+  /** 按单元归并溯源记录，同一纹样只列一次并注明用了多少处 */
+  function groupProvenance(list) {
+    const map = {};
+    (list || []).forEach((p) => {
+      if (!p || !p.unit) return;
+      const k = p.unit.id;
+      if (!map[k]) map[k] = { unit: p.unit, roles: [], count: 0, best: p.score || 0 };
+      map[k].count += p.placed || 1;
+      if (p.role && map[k].roles.indexOf(p.role) < 0) map[k].roles.push(p.role);
+      if ((p.score || 0) > map[k].best) map[k].best = p.score;
+    });
+    return Object.keys(map).map((k) => map[k]).sort((a, b) => b.count - a.count);
+  }
+
+  function anchorSourceText(unit) {
+    const src = (unit.db && unit.db[0]) || null;
+    if (!src) return "";
+    return "出处：《" + src.code + " " + src.title + "》" + (src.note ? " · " + src.note : "");
+  }
+
+  function renderAnchorPanel(res, bp) {
+    const panel = $("#anchorPanel");
+    if (!panel) return;
+    const c = res.correlation;
+    const groups = groupProvenance(res.provenance);
+    const holeCount = groups.reduce((n, g) => {
+      const isInner = g.roles.some((r) => r.indexOf("内部") >= 0 || r.indexOf("镂空") >= 0);
+      return n + (isInner ? g.count : 0);
+    }, 0);
+
+    const cornerCount = res.provenance.filter((p) => p.role === "四角压角").length;
+    $("#anchorSummary").textContent =
+      "主体 = 你的笔迹（原样保留、不重画）；装饰 = 剪纸素材库。" +
+      "本次在 " + (holeCount || 0) + " 处主体内部做了镂空，在 " +
+      cornerCount + " 个边角压了角花，整幅连通为一片，可直接下剪。";
+
+    $("#anchorTotal").textContent = c.total;
+    $("#anchorMetrics").innerHTML = [
+      ["主骨架保留", c.skeleton],
+      ["包围盒吻合", c.contour],
+      ["留白保持", c.blank],
+      ["刀路连贯", c.craft]
+    ].map(([k, v]) => "<li>" + k + " <b>" + v + "%</b></li>").join("");
+
+    $("#anchorUnits").innerHTML = groups.map((g) => {
+      const u = g.unit;
+      return "<li><b>" + escapeHTML(u.name) + "</b>（" + escapeHTML(u.layer) + " · " +
+        escapeHTML(u.tech) + "，用 " + g.count + " 处）" +
+        "<em>" + escapeHTML(g.roles.join(" / ")) + (anchorSourceText(u) ? "｜" + escapeHTML(anchorSourceText(u)) : "") + "</em></li>";
+    }).join("");
+
+    const keepLine = "保留自原画：<b>主体轮廓</b>、" +
+      (state.analysis && state.analysis.lines ? "<b>笔迹走向</b>、" : "") +
+      "<b>构图重心</b>（偏移 " + c.shiftPx + "px）。" +
+      "取自素材库：<b>" + groups.map((g) => escapeHTML(g.unit.name)).join("、") + "</b>，" +
+      "只用于内部镂空、四角压角与外框边饰。";
+    $("#anchorKeep").innerHTML = keepLine;
+
+    panel.hidden = false;
+  }
+
+  function hideAnchorPanel() {
+    const p = $("#anchorPanel");
+    if (p) p.hidden = true;
+  }
+
+  function anchorNote(res, bp) {
+    const groups = groupProvenance(res.provenance);
+    const names = groups.slice(0, 5).map((g) => g.unit.name).join("、");
+    const head = bp && bp.imagery ? "AI 把这几笔读成「" + bp.imagery + "」。" : "";
+    return head + "画面主体仍是你画的那几笔（骨架保留 " + res.correlation.skeleton +
+      "%），纹样库只提供了 " + groups.length + " 个单元的镂空与边饰：" + names + "。";
+  }
+
+  function applyAnchoredArt(res, bp, style, meta) {
+    state.aiImageURL = res.dataURL;
+    state.aiComposed = true;
+    state.aiBlueprint = bp || null;
+    state.aiBaseStyle = style;
+    state.aiAnchor = res;
+
+    const img = $("#aiCraftImg");
+    img.src = res.dataURL;
+    img.alt = "剪纸锚定稿";
+    clearCssMask(img);
+    applyAiPattern(res.dataURL);
+    $("#aiInkOverlay").hidden = true;
+
+    $("#aiRedrawNote").textContent = anchorNote(res, bp);
+    $("#aiArtTitle").textContent = "剪纸锚定稿" + (bp && bp.imagery ? " · " + bp.imagery : "");
+    renderAnchorPanel(res, bp);
+
+    const dl = $("#aiArtDownload");
+    dl.href = res.dataURL;
+    dl.download = "心绘非遗_剪纸锚定稿.png";
+    dl.hidden = false;
+    dl.removeAttribute("target");
+    dl.removeAttribute("rel");
+
+    cacheAiArt(style);
+  }
+
+  /**
+   * 锚定生成：先读出原画骨架，再在纹样库里检索填充单元。
+   * 图像模型在这里完全不参与——主体只能来自用户笔迹，
+   * 所以 AI 服务不可用时，剪纸成品依然能出、且不会跑偏。
+   */
+  async function generateAnchoredPapercut(loaderText) {
+    const tags = [];
+    if (state.report) {
+      if (state.report.archetype) tags.push(state.report.archetype);
+      if (state.report.mood) tags.push(state.report.mood);
+    }
+
+    loaderText.textContent = "读取原画骨架：轮廓、构图、笔迹走向…";
+
+    // 意象命名是锦上添花：失败就算了，不阻塞出图
+    let bp = null;
+    try {
+      const plan = await window.XHFYAI.craftPlan(state.analysis, state.report, "papercut");
+      bp = window.XHFYAI.craftBlueprint(state.analysis, state.report, "papercut", plan);
+    } catch (e) {
+      console.warn("[心绘非遗] 意象命名跳过（不影响出图）", e && (e.message || e));
+    }
+
+    loaderText.textContent = "检索纹样库，为主体内部与四角匹配单元…";
+    await nextFrame();
+    const res = window.XHFYPapercut.compose(studio, { size: COMPOSE_SIZE, tags: tags, imagery: bp && bp.imagery });
+    if (!res) throw new Error("没有读到可用的笔迹，请先把画补完整");
+    return { res, bp };
+  }
+
 
   async function generateAiCraft() {
     if (!state.analysis || !state.report) {
@@ -1187,6 +1337,16 @@
     loader.hidden = false;
 
     try {
+      // 剪纸走锚定链路：主体只来自用户笔迹，纹样库只做填充与边饰
+      if (style === "papercut" && window.XHFYPapercut) {
+        const out = await generateAnchoredPapercut(loaderText);
+        applyAnchoredArt(out.res, out.bp, style, meta);
+        const g = groupProvenance(out.res.provenance);
+        toast("剪纸锚定稿完成：主体保留 " + out.res.correlation.skeleton +
+          "%，引用库内 " + g.length + " 个纹样单元", 4600);
+        return;
+      }
+
       // 第一步：请 AI 读懂这笔涂鸦背后的潜意识，给出具象意象与工艺理由
       loaderText.textContent = "AI 正在读你线条里的意象…";
       const plan = await window.XHFYAI.craftPlan(state.analysis, state.report, style);
@@ -1336,6 +1496,14 @@
   function localPatternURL(size) {
     const s = size || PRINT_SIZE;
     const style = state.aiBaseStyle || state.craftStyle || "papercut";
+
+    // 剪纸：打印级图样也走锚定引擎，原分辨率重算而不是把 1024 放大
+    if (style === "papercut" && window.XHFYPapercut) {
+      const tags = state.report && state.report.archetype ? [state.report.archetype] : [];
+      const res = window.XHFYPapercut.compose(studio, { size: s, tags: tags });
+      if (res) return res.dataURL;
+    }
+
     const cv = window.XHFYCraft.render(style, studio, s);
     return cv.toDataURL("image/png");
   }
