@@ -367,7 +367,7 @@
         setTimeout(() => maybeCompanion(false), 1000);
       }
     });
-    // 调试出口：剪纸锚定引擎需要直接读取笔迹画布，便于离线复算与自检
+    // 调试出口：剪纸转译引擎需要直接读取笔迹画布，便于离线复算与自检
     window.__xhfyStudio = studio;
 
     // 调色盘
@@ -1114,7 +1114,7 @@
   }
 
   /** 未生成时的提示语；换工艺或重画后要把上一轮的意象解读清掉 */
-  const AI_NOTE_HINT = "生成后这里会写出这次引用了纹样库的哪些单元：你的线条被原样保留为主体，库里的角花、卷草、云纹只负责补内部镂空、填间隙与压四角。";
+  const AI_NOTE_HINT = "生成后这里会写出这次引用了纹样库的哪些单元：原画会被概括成剪纸块面（保留构图重心与体量），细节不再逐笔描摹，改由库里的团花、云纹、锯齿、水波做阴刻镂空与边框角花。";
 
   /** 把当前已生成的二创稿按工艺存入缓存，供切回来时复用 */
   function cacheAiArt(style) {
@@ -1155,7 +1155,7 @@
 
     if (hit.anchor) {
       $("#aiRedrawNote").textContent = anchorNote(hit.anchor, bp);
-      $("#aiArtTitle").textContent = "剪纸锚定稿" + (bp.imagery ? " · " + bp.imagery : "");
+      $("#aiArtTitle").textContent = "传统剪纸稿" + (bp.imagery ? " · " + bp.imagery : "");
       renderAnchorPanel(hit.anchor, bp);
     } else {
       hideAnchorPanel();
@@ -1167,7 +1167,7 @@
 
     const dl = $("#aiArtDownload");
     dl.href = hit.imageURL;
-    dl.download = hit.anchor ? "心绘非遗_剪纸锚定稿.png"
+    dl.download = hit.anchor ? "心绘非遗_传统剪纸稿.png"
       : "心绘非遗_AI二创_" + (meta.short || style) + ".png";
     dl.hidden = false;
     if (hit.composed) { dl.removeAttribute("target"); dl.removeAttribute("rel"); }
@@ -1188,14 +1188,14 @@
     hideAnchorPanel();
     applyAiPattern("");
     $("#aiRedrawNote").textContent = AI_NOTE_HINT;
-    $("#aiArtTitle").textContent = "剪纸锚定稿 · 保留原构图";
+    $("#aiArtTitle").textContent = "传统剪纸稿 · 保留原构图";
     const dl = $("#aiArtDownload");
     dl.removeAttribute("href");
     dl.hidden = true;
   }
 
   function setAiButtons(loading) {
-    const label = loading ? "生成中…" : "生成剪纸锚定稿";
+    const label = loading ? "生成中…" : "生成传统剪纸稿";
     const span = $("#aiRedraw").querySelector("span");
     if (span) span.textContent = label;
     else $("#aiRedraw").textContent = label;
@@ -1203,7 +1203,7 @@
     $("#aiCraftEmptyBtn").disabled = loading;
   }
 
-  /* ---------------- 剪纸锚定链路 ---------------- */
+  /* ---------------- 传统剪纸转译链路 ---------------- */
 
   /** 按单元归并溯源记录，同一纹样只列一次并注明用了多少处 */
   function groupProvenance(list) {
@@ -1230,25 +1230,21 @@
     if (!panel) return;
     const c = res.correlation;
     const groups = groupProvenance(res.provenance);
-    const holeCount = groups.reduce((n, g) => {
-      const isInner = g.roles.some((r) => r.indexOf("内部") >= 0 || r.indexOf("镂空") >= 0);
-      return n + (isInner ? g.count : 0);
-    }, 0);
 
     const cornerCount = res.provenance.filter((p) => p.role === "四角压角").length;
     const st = res.stats || {};
     const innLabel = { low: "低创新", medium: "中等创新", high: "高创新" }[st.innovation] || "中等创新";
+    const modeLabel = st.mode === "medallion" ? "传统团花构图" : "剪影概括构图";
     $("#anchorSummary").textContent =
-      "创新度：" + innLabel + "。主体 = 你的笔迹（原样保留、不重画）；装饰 = 剪纸素材库。" +
-      "本次在 " + (holeCount || 0) + " 处主体内部做了镂空，" +
-      "线条转译 " + (st.linePlaced || 0) + " 处，间隙点缀 " + (st.gapPlaced || 0) + " 处，" +
-      cornerCount + " 个边角压了角花，整幅连通为一片，可直接下剪。";
+      "创新度：" + innLabel + "。方式 = " + modeLabel + "：原画只提供构图重心、体量与走势，" +
+      "再转译为剪纸语言（阳刻块面 + 阴刻镂空 + 边框角花），不逐笔描摹、不做红色描边。" +
+      "本次 " + (st.holes || 0) + " 处纹样镂空，" + cornerCount + " 个角花，整幅连通为一片，可直接下剪。";
 
     $("#anchorTotal").textContent = c.total;
     $("#anchorMetrics").innerHTML = [
-      ["主骨架保留", c.skeleton],
-      ["包围盒吻合", c.contour],
-      ["留白保持", c.blank],
+      ["构图重心呼应", c.pose],
+      ["主体体量吻合", c.extent],
+      ["分区分布呼应", c.mass],
       ["刀路连贯", c.craft]
     ].map(([k, v]) => "<li>" + k + " <b>" + v + "%</b></li>").join("");
 
@@ -1259,11 +1255,10 @@
         "<em>" + escapeHTML(g.roles.join(" / ")) + (anchorSourceText(u) ? "｜" + escapeHTML(anchorSourceText(u)) : "") + "</em></li>";
     }).join("");
 
-    const keepLine = "保留自原画：<b>主体轮廓</b>、" +
-      (state.analysis && state.analysis.lines ? "<b>笔迹走向</b>、" : "") +
-      "<b>构图重心</b>（偏移 " + c.shiftPx + "px）。" +
+    const keepLine = "呼应自原画：<b>构图重心</b>（偏移 " + c.shiftPx + "px）、<b>主体体量</b>与<b>分区分布</b>，" +
+      "不再逐笔复制线条。" +
       "取自素材库：<b>" + groups.map((g) => escapeHTML(g.unit.name)).join("、") + "</b>，" +
-      "只用于内部镂空、四角压角与外框边饰。";
+      "用于阴刻镂空、四角压角与外框边饰。";
     $("#anchorKeep").innerHTML = keepLine;
 
     panel.hidden = false;
@@ -1278,8 +1273,9 @@
     const groups = groupProvenance(res.provenance);
     const names = groups.slice(0, 5).map((g) => g.unit.name).join("、");
     const head = bp && bp.imagery ? "AI 把这几笔读成「" + bp.imagery + "」。" : "";
-    return head + "画面主体仍是你画的那几笔（骨架保留 " + res.correlation.skeleton +
-      "%），纹样库只提供了 " + groups.length + " 个单元的镂空与边饰：" + names + "。";
+    const modeText = res.stats && res.stats.mode === "medallion" ? "把它组织成传统团花" : "把它概括成剪纸块面";
+    return head + modeText + "（构图呼应 " + res.correlation.total +
+      "%：重心、体量与分区分布），纹样库提供了 " + groups.length + " 个单元的阴刻镂空与边饰：" + names + "。";
   }
 
   function applyAnchoredArt(res, bp, style, meta) {
@@ -1291,18 +1287,18 @@
 
     const img = $("#aiCraftImg");
     img.src = res.dataURL;
-    img.alt = "剪纸锚定稿";
+    img.alt = "传统剪纸稿";
     clearCssMask(img);
     applyAiPattern(res.dataURL);
     $("#aiInkOverlay").hidden = true;
 
     $("#aiRedrawNote").textContent = anchorNote(res, bp);
-    $("#aiArtTitle").textContent = "剪纸锚定稿" + (bp && bp.imagery ? " · " + bp.imagery : "");
+    $("#aiArtTitle").textContent = "传统剪纸稿" + (bp && bp.imagery ? " · " + bp.imagery : "");
     renderAnchorPanel(res, bp);
 
     const dl = $("#aiArtDownload");
     dl.href = res.dataURL;
-    dl.download = "心绘非遗_剪纸锚定稿.png";
+    dl.download = "心绘非遗_传统剪纸稿.png";
     dl.hidden = false;
     dl.removeAttribute("target");
     dl.removeAttribute("rel");
@@ -1311,9 +1307,9 @@
   }
 
   /**
-   * 锚定生成：先读出原画骨架，再在纹样库里检索填充单元。
-   * 图像模型在这里完全不参与——主体只能来自用户笔迹，
-   * 所以 AI 服务不可用时，剪纸成品依然能出、且不会跑偏。
+   * 剪纸生成：先把原画概括成块面剪影（只保留构图重心、体量与走势），
+   * 再用纹样库做阴刻镂空、边框与角花，转译成能真正下剪的传统剪纸。
+   * 图像模型在这里不参与——AI 不可用时，剪纸成品依然能出、且不会跑偏。
    */
   async function generateAnchoredPapercut(loaderText) {
     const tags = [];
@@ -1322,7 +1318,7 @@
       if (state.report.mood) tags.push(state.report.mood);
     }
 
-    loaderText.textContent = "读取原画骨架：轮廓、构图、笔迹走向…";
+    loaderText.textContent = "概括原画：提取构图重心、体量与走势…";
 
     // 意象命名是锦上添花：失败就算了，不阻塞出图
     let bp = null;
@@ -1367,12 +1363,12 @@
     loader.hidden = false;
 
     try {
-      // 剪纸走锚定链路：主体只来自用户笔迹，纹样库只做填充与边饰
+      // 剪纸走「剪影概括 + 纹样重构」链路：原画只提供构图重心/体量，不逐笔描摹
       if (style === "papercut" && window.XHFYPapercut) {
         const out = await generateAnchoredPapercut(loaderText);
         applyAnchoredArt(out.res, out.bp, style, meta);
         const g = groupProvenance(out.res.provenance);
-        toast("剪纸锚定稿完成：主体保留 " + out.res.correlation.skeleton +
+        toast("传统剪纸稿完成：构图呼应 " + out.res.correlation.total +
           "%，引用库内 " + g.length + " 个纹样单元", 4600);
         return;
       }
@@ -1498,9 +1494,9 @@
 
     // 创新度档位切换：低/中/高，切换后需要重新生成才生效
     const innHints = {
-      low: "纹样少，仅少量内部镂空 + 四角角花，主体轮廓改动极小，优先保证辨识度",
-      medium: "主体骨架不变，内部丰富镂空纹样，搭配规范剪纸边框，兼顾识别度与剪纸美感",
-      high: "主体轮廓保留识别特征，内部大面积用剪纸纹样重构，线条大量转译，装饰感更强"
+      low: "低创新：剪影保留更多原始轮廓，仅少量镂空 + 四角角花，最多呼应原画",
+      medium: "中等创新：剪影适度概括，内部丰富镂空 + 规范边框角花，兼顾呼应度与剪纸美感",
+      high: "高创新：剪影大幅概括，内部大面积纹样重构、同心环更密，装饰感最强"
     };
     $$("#innovationPicker .ip-btn").forEach((b) => {
       b.addEventListener("click", () => {
@@ -1543,7 +1539,7 @@
     const s = size || PRINT_SIZE;
     const style = state.aiBaseStyle || state.craftStyle || "papercut";
 
-    // 剪纸：打印级图样也走锚定引擎，原分辨率重算而不是把 1024 放大
+    // 剪纸：打印级图样也走转译引擎，原分辨率重算而不是把 1024 放大
     if (style === "papercut" && window.XHFYPapercut) {
       const tags = state.report && state.report.archetype ? [state.report.archetype] : [];
       const res = window.XHFYPapercut.compose(studio, { size: s, tags: tags, innovation: state.innovationLevel });

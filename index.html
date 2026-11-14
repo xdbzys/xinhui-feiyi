@@ -7,7 +7,7 @@
 <meta name="description" content="心绘非遗：画下闭眼后最舒服的地方，由你确认画里的情绪意象，再把视觉锚点转译成有出处的传统剪纸纹样，生成可放大绘制、可打印剪裁的非遗剪纸图样与心愈手作指南。">
 <meta name="theme-color" content="#F7F2E8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23A63A2B'/%3E%3Ctext x='32' y='43' font-size='32' text-anchor='middle' fill='%23F7F2E8' font-family='serif'%3E%E5%BF%83%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/css/style.css?v=b7e31c9">
+<link rel="stylesheet" href="assets/css/style.css?v=c7d2a41">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -375,13 +375,13 @@
 
         <div class="craft-stage">
           <div class="craft-frame">
-            <img id="aiCraftImg" alt="剪纸锚定稿" hidden>
+            <img id="aiCraftImg" alt="传统剪纸稿" hidden>
             <canvas id="aiInkOverlay" aria-hidden="true" hidden></canvas>
             <span class="craft-badge" id="craftBadge">非遗剪纸</span>
             <div class="craft-loading" id="craftLoading" hidden><i></i><span>正在读取你的原画…</span></div>
             <div class="ai-craft-empty" id="aiCraftEmpty">
               <p>你的笔迹就是剪纸的骨架：系统先把线条加粗成红纸主体，笔迹围出的封闭区域按形状检索纹样库镂空成花，四角与间隙只用角花、卷草、云纹补景。主体不会被替换，也不会被重画。</p>
-              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">生成剪纸锚定稿</button>
+              <button id="aiCraftEmptyBtn" class="btn btn-primary btn-small" type="button">生成传统剪纸稿</button>
             </div>
           </div>
           <aside class="craft-info">
@@ -393,26 +393,26 @@
               <div><dt>纹样语法</dt><dd id="craftGrammar">轮廓 · 镂空 · 对称</dd></div>
               <div><dt>适合手作</dt><dd id="craftUse">剪纸 / 窗花 / 帆布袋印花</dd></div>
             </dl>
-            <div class="craft-note" id="craftNote">小提示：红色越深，剪影越完整；细碎的笔触会被 AI 收拢成连续的刀路。</div>
+            <div class="craft-note" id="craftNote">小提示：细碎笔触会被收拢成连续的块面与刀路；原画只提供构图重心与走势，细节由传统纹样重构。</div>
             <div class="innovation-picker" id="innovationPicker" role="group" aria-label="剪纸创新度档位">
               <span class="ip-label">创新度</span>
               <button class="ip-btn" data-innovation="low" type="button">低</button>
               <button class="ip-btn active" data-innovation="medium" type="button">中（推荐）</button>
               <button class="ip-btn" data-innovation="high" type="button">高</button>
-              <em class="ip-hint" id="innovationHint">主体骨架不变，内部丰富镂空纹样，搭配规范剪纸边框，兼顾识别度与剪纸美感</em>
+              <em class="ip-hint" id="innovationHint">中等创新：剪影适度概括，内部丰富镂空 + 规范边框角花，兼顾呼应度与剪纸美感</em>
             </div>
             <div class="craft-actions">
-              <button id="aiRedraw" class="btn btn-primary" type="button"><span>生成剪纸锚定稿</span><i>✦</i></button>
+              <button id="aiRedraw" class="btn btn-primary" type="button"><span>生成传统剪纸稿</span><i>✦</i></button>
               <button id="downloadPattern" class="btn btn-ghost" type="button">下载打印级图样 · 2048px</button>
             </div>
-            <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出这次引用了纹样库的哪些单元：你的线条被原样保留为主体，库里的角花、卷草、云纹只负责补内部镂空、填间隙与压四角。</p>
+            <p class="ai-redraw-note" id="aiRedrawNote">生成后这里会写出这次引用了纹样库的哪些单元：原画会被概括成剪纸块面（保留构图重心与体量），细节不逐笔描摹，改由库里的团花、云纹、锯齿、水波做阴刻镂空与边框角花。</p>
 
-            <!-- 原画锚定报告：纹样来源与原画关联度全部由本地引擎确定性计算，
+            <!-- 原画关联报告：关联度与纹样来源全部由本地引擎确定性计算，
                  不依赖图像模型，因此 AI 不可用时依然完整可读。 -->
             <div class="anchor-panel" id="anchorPanel" hidden>
               <div class="anchor-head">
-                <span class="lang-no">ANCHORED COMPOSITION</span>
-                <h4>原画锚定报告</h4>
+                <span class="lang-no">COMPOSITION ECHO</span>
+                <h4>原画关联报告</h4>
                 <p class="micro" id="anchorSummary"></p>
               </div>
               <div class="anchor-score">
@@ -445,8 +445,8 @@
             </div>
 
             <div class="ai-art-meta" id="aiArtMeta" hidden>
-              <span id="aiArtTitle">剪纸锚定稿 · 保留原构图</span>
-              <a href="#" id="aiArtDownload" hidden>下载剪纸锚定稿 ↓</a>
+              <span id="aiArtTitle">传统剪纸稿 · 保留原构图</span>
+              <a href="#" id="aiArtDownload" hidden>下载传统剪纸稿 ↓</a>
             </div>
             <button id="toGuide" class="link-btn" type="button">带着这张图样，进入心愈手作 →</button>
           </aside>
@@ -700,16 +700,16 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="assets/js/config.js?v=b7e31c9"></script>
-<script src="assets/js/paint.js?v=b7e31c9"></script>
-<script src="assets/js/analyze.js?v=b7e31c9"></script>
-<script src="assets/js/craft.js?v=b7e31c9"></script>
-<script src="assets/js/knowledge.js?v=b7e31c9"></script>
-<script src="assets/js/heritage.js?v=b7e31c9"></script>
-<script src="assets/js/motifdb.js?v=b7e31c9"></script>
-<script src="assets/js/papercut.js?v=b7e31c9"></script>
-<script src="assets/js/ai.js?v=b7e31c9"></script>
-<script src="assets/js/report.js?v=b7e31c9"></script>
-<script src="assets/js/app.js?v=b7e31c9"></script>
+<script src="assets/js/config.js?v=c7d2a41"></script>
+<script src="assets/js/paint.js?v=c7d2a41"></script>
+<script src="assets/js/analyze.js?v=c7d2a41"></script>
+<script src="assets/js/craft.js?v=c7d2a41"></script>
+<script src="assets/js/knowledge.js?v=c7d2a41"></script>
+<script src="assets/js/heritage.js?v=c7d2a41"></script>
+<script src="assets/js/motifdb.js?v=c7d2a41"></script>
+<script src="assets/js/papercut.js?v=c7d2a41"></script>
+<script src="assets/js/ai.js?v=c7d2a41"></script>
+<script src="assets/js/report.js?v=c7d2a41"></script>
+<script src="assets/js/app.js?v=c7d2a41"></script>
 </body>
 </html>

@@ -1,16 +1,16 @@
 /* =========================================================
-   心绘非遗 · 剪纸锚定引擎（papercut）
+   心绘非遗 · 传统剪纸转译引擎（papercut）
    ---------------------------------------------------------
-   与「让图像模型整幅重画」不同，这里的规则是：
-     1. 用户笔迹 = 画面主骨架，原样加粗成红纸阳刻主体，不改形、不挪位；
-     2. 笔迹围合出的封闭区域 = 主体内部，填红后按区域形状从纹样库
-        检索最契合的单元，镂空成孔（阴刻）；
-     3. 主体之外的空白 = 间隙，只用纹样库的角花、卷草、云纹做点缀，
-        且每个点缀都用缠枝「牵」到主体上，保证整张剪纸是一整片纸，
-        不会出现剪下来会掉的孤岛；
-     4. 输出纹样溯源（引用了库里的哪些单元）与原画关联度（哪些结构
-        来自用户原画、哪些来自素材库）。
-   —— 装饰只做加法与镂空，绝不替换用户画出来的物象。
+   这一版刻意降低对原画的机械锚定，不再把用户笔迹原样涂红：
+     1. 概括：把原画「化」成块面剪影——合并邻近笔迹、填充围合区域、
+        闭运算填凹、开运算去细碎毛刺，只保留画面重心、体量与大体走势；
+     2. 转译：剪影只作为「阳刻」红面，画面细节不再描摹，改由纹样库的
+        经典单元以「阴刻」镂空的方式重构（团花、云纹、锯齿、水波…）；
+     3. 构图：统一加上传统边框、四角角花，并用短枝把主体与边框连成
+        一整片纸，符合剪纸「线线相连」的刀路逻辑；
+     4. 可剪：所有镂空都留足红桥（最小线宽），孤岛必补桥，碎点清除，
+        保证成品能真正用剪刀剪出来，而不是一张红色简笔画。
+   —— 关联性只保留在「构图呼应」层面：重心、体量、朝向，而非逐笔复制。
    ========================================================= */
 (function () {
   "use strict";
@@ -19,6 +19,8 @@
   const TAU = Math.PI * 2;
   /** 外框边线距纸边的距离（占画布边长的比例） */
   const FRAME_INSET = 0.028;
+  const RED = "#a8332a";
+  const RED_RGB = [168, 51, 42];
 
   /* ---------------- 基础画布工具 ---------------- */
 
@@ -47,7 +49,7 @@
 
   /* ---------------- 形态学 ---------------- */
 
-  /** 可分离最大值膨胀：把细笔迹加粗到剪纸可承受的线宽 */
+  /** 可分离最大值膨胀 */
   function dilate(m, w, h, r) {
     if (r <= 0) return m.slice();
     const tmp = new Uint8Array(w * h);
@@ -74,7 +76,7 @@
     return out;
   }
 
-  /** 可分离最小值腐蚀：闭运算的另一半，用来在平滑后收回到原轮廓 */
+  /** 可分离最小值腐蚀 */
   function erodeMask(m, w, h, r) {
     if (r <= 0) return m.slice();
     const tmp = new Uint8Array(w * h);
@@ -101,7 +103,17 @@
     return out;
   }
 
-  /** 从边界泛洪，标出「外部」；剩下的空洞就是笔迹围合出来的内部 */
+  /** 开运算：先去细（腐蚀）再复原（膨胀），消掉细碎毛刺与孤立碎线 */
+  function openMask(m, w, h, r) {
+    return dilate(erodeMask(m, w, h, r), w, h, r);
+  }
+
+  /** 闭运算：先膨胀再腐蚀，填平凹口与小缝 */
+  function closeMask(m, w, h, r) {
+    return erodeMask(dilate(m, w, h, r), w, h, r);
+  }
+
+  /** 从边界泛洪，标出「外部」；剩下的空洞就是围合出来的内部 */
   function markOutside(m, w, h) {
     const out = new Uint8Array(w * h);
     const stack = [];
@@ -167,52 +179,210 @@
       const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
       stats.push({
         area, cx, cy,
+        ax: px.length ? px[0] : Math.round(cx),
+        ay: px.length ? px[1] : Math.round(cy),
         minX, minY, maxX, maxY,
         bw: maxX - minX + 1,
         bh: maxY - minY + 1,
-        angle: ang,
-        elongation: Math.max(sxx, syy) / Math.max(1e-3, Math.min(sxx, syy))
+        angle: ang
       });
     }
     return { labels, count, stats };
   }
 
-  /* ---------------- 区域描述 ---------------- */
+  /** 两遍扫描近似欧氏距离场（到最近「非零」像素的距离） */
+  function distanceField(m, w, h) {
+    const BIG = w + h;
+    const d = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) d[i] = m[i] ? 0 : BIG;
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        const v = d[row + x];
+        if (x > 0) d[row + x] = Math.min(v, d[row + x - 1] + 1);
+        if (y > 0) d[row + x] = Math.min(d[row + x], d[row - w + x] + 1);
+      }
+      for (let x = w - 1; x >= 0; x--) {
+        const v = d[row + x];
+        if (x < w - 1) d[row + x] = Math.min(v, d[row + x + 1] + 1);
+      }
+    }
+    for (let y = h - 1; y >= 0; y--) {
+      const row = y * w;
+      for (let x = w - 1; x >= 0; x--) {
+        const v = d[row + x];
+        if (x < w - 1) d[row + x] = Math.min(v, d[row + x + 1] + 1);
+        if (y < h - 1) d[row + x] = Math.min(d[row + x], d[row + w + x] + 1);
+      }
+      for (let x = 0; x < w; x++) {
+        const v = d[row + x];
+        if (x > 0) d[row + x] = Math.min(d[row + x], d[row + x - 1] + 1);
+      }
+    }
+    return d;
+  }
 
-  function describeRegion(st, S) {
-    const elong = st.bh > 0 && st.bw > 0 ? Math.max(st.bw, st.bh) / Math.max(1, Math.min(st.bw, st.bh)) : 1;
-    const circle = Math.min(st.bw, st.bh) / Math.max(1, Math.max(st.bw, st.bh));
-    // 区位：落在哪个四角 / 是否贴边成带
-    const cx = st.cx / S, cy = st.cy / S;
-    const nearCorner =
-      (cx < 0.26 || cx > 0.74) && (cy < 0.26 || cy > 0.74);
-    const thinBand = Math.min(st.bw, st.bh) < S * 0.06;
-
-    let shape = "round";
-    if (nearCorner && st.area < S * S * 0.05) shape = "corner";
-    else if (elong > 2.1 || thinBand) shape = "elongated";
-    else if (elong > 1.5) shape = "round";
-
-    // 六维匹配需要的特征
-    const areaShare = st.area / (S * S);
-    // 体量：大区域配团花，小区域配单枚小纹样
-    const sizeClass = (areaShare > 0.016 || Math.min(st.bw, st.bh) > S * 0.15) ? "large" : "small";
+  /** 掩码包围盒与质心 */
+  function bboxOf(m, w, h) {
+    let x0 = w, y0 = h, x1 = -1, y1 = -1, count = 0, sx = 0, sy = 0;
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        if (!m[row + x]) continue;
+        count++; sx += x; sy += y;
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (!count) return { x0: 0, y0: 0, x1: 0, y1: 0, w: 0, h: 0, cx: w / 2, cy: h / 2, count: 0 };
     return {
-      shape,
-      zone: shape === "corner" ? "corner" : (thinBand ? "band" : "inner"),
-      curve: 0.35 + circle * 0.6,
-      angular: 0.9 - circle * 0.55,
-      radial: circle * 0.85,
-      linear: Math.min(1, (elong - 1) / 2.2),
-      density: sizeClass === "large" ? 0.7 : 0.42,
-      sizeClass,
-      angle: st.angle,
-      inradius: Math.max(6, Math.min(st.bw, st.bh) * 0.5),
-      area: st.area
+      x0, y0, x1, y1,
+      w: x1 - x0 + 1, h: y1 - y0 + 1,
+      cx: sx / count, cy: sy / count, count
     };
   }
 
-  /* ---------------- 镂空绘制（阴刻） ---------------- */
+  function innovationLevel(inn) {
+    if (inn === "low" || inn === 0) return 0;
+    if (inn === "high" || inn === 2) return 2;
+    return 1; // medium 默认
+  }
+
+  /* =========================================================
+     一、剪影概括：把原画化成块面
+     ========================================================= */
+
+  /**
+   * 笔迹 → 块面剪影。
+   * 先小幅膨胀合并近邻笔迹、闭合手绘缺口；围合区域整体填实（阳刻块面）；
+   * 再用闭运算填平凹口、开运算削掉细碎毛刺。
+   * 创新度越高，概括越强（低创新保留更多原始轮廓）。
+   */
+  function buildSilhouette(ink, S, inn) {
+    const bridge = Math.max(3, Math.round(S * 0.008));
+    const base = dilate(ink, S, S, bridge);
+    const outside = markOutside(base, S, S);
+    const solid = new Uint8Array(S * S);
+    for (let i = 0; i < S * S; i++) solid[i] = outside[i] ? 0 : 1;
+
+    const rClose = Math.max(3, Math.round(S * (inn === 0 ? 0.005 : inn === 2 ? 0.013 : 0.009)));
+    const rOpen = Math.max(2, Math.round(S * (inn === 0 ? 0.003 : inn === 2 ? 0.011 : 0.007)));
+    let s = closeMask(solid, S, S, rClose);
+    s = openMask(s, S, S, rOpen);
+    return s;
+  }
+
+  /**
+   * 只保留「紧凑块面」作为剪纸主体。
+   * 细长且填充率低的连通块（横贯的波浪、随手拉的长线）不进入主体，
+   * 否则会被加粗成一条红绸带，正是要避免的「红色涂鸦感」。
+   * 最大的那一块无论如何保留，避免主体被清空。
+   */
+  function filterMasses(mask, S) {
+    const lab = label(mask, S, S, 1);
+    if (lab.count <= 1) return mask;
+    const keep = new Uint8Array(lab.count + 1);
+    const minArea = S * S * 0.0006;
+    let maxArea = 0, maxIdx = 0, keptCompact = 0;
+    for (let i = 0; i < lab.stats.length; i++) {
+      const st = lab.stats[i];
+      if (st.area > maxArea) { maxArea = st.area; maxIdx = i; }
+      if (st.area < minArea) continue;
+      const aspect = Math.max(st.bw, st.bh) / Math.max(1, Math.min(st.bw, st.bh));
+      const fill = st.area / (st.bw * st.bh);
+      if (aspect > 3.0 && fill < 0.45) continue;
+      keep[i + 1] = 1;
+      keptCompact++;
+    }
+    // 一块紧凑的都没有（整幅都是线条/涂鸦）时，才退回保留最大块
+    if (!keptCompact) keep[maxIdx + 1] = 1;
+
+    const out = new Uint8Array(S * S);
+    let n = 0;
+    for (let p = 0; p < S * S; p++) {
+      const lb = lab.labels[p];
+      if (lb && keep[lb]) { out[p] = 1; n++; }
+    }
+    return n ? out : mask;
+  }
+
+  /** 把剪影等比缩放并居中到画面（给边框留出余量），返回新掩码 */
+  function normalizeSilhouette(mask, S, maxFrac) {
+    const bb = bboxOf(mask, S, S);
+    if (!bb.count) return { mask, bb: null, count: 0 };
+
+    const maxSide = S * maxFrac;
+    let scale = maxSide / Math.max(1, Math.max(bb.w, bb.h));
+    if (!isFinite(scale) || scale <= 0) scale = 1;
+    // 允许放大，让小主体也能撑满构图；上限 3 倍，避免糊成一片
+    scale = Math.min(scale, 3);
+    if (Math.abs(scale - 1) < 0.02 && Math.abs(bb.cx - S / 2) < S * 0.01 && Math.abs(bb.cy - S / 2) < S * 0.01) {
+      return { mask, bb, count: bb.count };
+    }
+
+    const src = mk(S);
+    const sctx = ctxOf(src);
+    const im = sctx.createImageData(S, S);
+    for (let i = 0, p = 0; i < S * S; i++, p += 4) {
+      if (mask[i]) { im.data[p] = 255; im.data[p + 1] = 255; im.data[p + 2] = 255; im.data[p + 3] = 255; }
+    }
+    sctx.putImageData(im, 0, 0);
+
+    const nw = bb.w * scale, nh = bb.h * scale;
+    const dx = (S - nw) / 2, dy = (S - nh) / 2;
+    const dst = mk(S);
+    const dctx = ctxOf(dst);
+    dctx.imageSmoothingEnabled = true;
+    dctx.drawImage(src, bb.x0, bb.y0, bb.w, bb.h, dx, dy, nw, nh);
+
+    const data = dctx.getImageData(0, 0, S, S).data;
+    const out = new Uint8Array(S * S);
+    let n = 0;
+    for (let i = 0, p = 3; i < S * S; i++, p += 4) if (data[p] > 90) { out[i] = 1; n++; }
+    // 缩放会带来毛边，补一次开运算让小刺消失
+    return { mask: openMask(out, S, S, Math.max(1, Math.round(S * 0.002))), bb: bboxOf(out, S, S), count: n };
+  }
+
+  /** 传统团花兜底：原画笔迹太少时，用「以原画重心/体量为种子」的团花构图 */
+  function medallionMask(S, cx, cy, R) {
+    const cv = mk(S);
+    const c = ctxOf(cv);
+    c.fillStyle = "#fff";
+    c.beginPath();
+    c.arc(cx, cy, R, 0, TAU);
+    c.fill();
+    // 八瓣外展，形成团花轮廓
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU;
+      c.beginPath();
+      c.ellipse(cx + Math.cos(a) * R * 0.86, cy + Math.sin(a) * R * 0.86,
+        R * 0.26, R * 0.16, a, 0, TAU);
+      c.fill();
+    }
+    const data = c.getImageData(0, 0, S, S).data;
+    const out = new Uint8Array(S * S);
+    let n = 0;
+    for (let i = 0, p = 3; i < S * S; i++, p += 4) if (data[p] > 90) { out[i] = 1; n++; }
+    return { mask: out, count: n };
+  }
+
+  /** 用主成分方向作为纹样环的「朝向」，让镂空与画面走势呼应 */
+  function principalAngle(mask, S, bb) {
+    if (!bb || !bb.count) return 0;
+    let sxx = 0, syy = 0, sxy = 0, n = 0;
+    const step = Math.max(2, Math.round(S * 0.01));
+    for (let y = bb.y0; y <= bb.y1; y += step) {
+      for (let x = bb.x0; x <= bb.x1; x += step) {
+        if (!mask[y * S + x]) continue;
+        const dx = x - bb.cx, dy = y - bb.cy;
+        sxx += dx * dx; syy += dy * dy; sxy += dx * dy; n++;
+      }
+    }
+    if (!n) return 0;
+    return 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  }
+
+  /* ---------------- 纹样镂空（阴刻） ---------------- */
 
   function punchUnit(ctx, unit, d, S, color) {
     const D = DB.draw;
@@ -274,481 +444,304 @@
     ctx.restore();
   }
 
-  /* ---------------- 线条转译：把原画的开环长线换成同方向剪纸纹样 ---------------- */
-
-  /**
-   * 把 studio 的笔迹点映射到 S×S 画布坐标（与 inkCanvas 完全一致的映射），
-   * 供线条转译按真实轨迹铺纹样，而不是按像素骨架猜方向。
-   */
-  function mapStrokes(studio, S) {
-    const pad = S * 0.08;
-    const inner = S - pad * 2;
-    const W = studio.canvas.width, H = studio.canvas.height;
-    const h = (inner / W) * H;
-    const y0 = (S - h) / 2;
-    return (studio.strokes || [])
-      .filter((s) => s && s.tool !== "eraser" && s.points && s.points.length >= 2)
-      .map((s) => {
-        const pts = s.points.map((p) => ({
-          x: pad + (p.x / W) * inner,
-          y: y0 + (p.y / H) * h
-        }));
-        // 轨迹长度 + 是否近似闭合（首尾距 < 1.5% 画面宽就算闭合）
-        let len = 0;
-        for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-        const close = Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < S * 0.018;
-        return { points: pts, len, close, tool: s.tool };
-      });
-  }
-
-  /**
-   * 沿每条长笔迹铺剪纸纹样（云纹 / 锯齿 / 柳叶 / 水波纹）。
-   * 只处理「开环长线」——闭合轮廓交给围合填充去处理，这里不重复画。
-   * 纹样方向跟随笔迹走向，间距由创新度控制。
-   */
-  function decorateLines(ctx, strokes, S, color, innovation, provenance) {
-    const inn = innovationLevel(innovation);
-    if (inn === 0) return 0;
-    const D = DB.draw;
-    const lw = Math.max(5, S * 0.007);
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    let placed = 0;
-    strokes.forEach((s) => {
-      if (s.close) return;                       // 闭合轮廓不做线条转译
-      if (s.len < S * 0.06) return;              // 太短的线不铺纹样
-      // 沿轨迹等距采样
-      const spacing = S * (inn === 1 ? 0.09 : inn === 2 ? 0.072 : 0.058);
-      const n = Math.max(2, Math.floor(s.len / spacing));
-      for (let k = 0; k < n; k++) {
-        const t = (k + 0.5) / n;
-        const seg = sampleSegment(s.points, s.len, t);
-        if (!seg) continue;
-        const r = Math.max(S * 0.018, Math.min(S * 0.05, spacing * 0.42));
-        // 按走向与曲率挑纹样：弯的走云/卷草，直的走锯齿/柳叶
-        const curved = s.len > S * 0.16 && seg.curv > 0.6;
-        if (curved) {
-          D.spiral(ctx, seg.x, seg.y, r * 0.75, 1.6, lw, (k % 2) ? 1 : -1);
-          record(provenance, "cloud-roll", "线条转译", 1);
-        } else {
-          D.sawtooth(ctx, seg.x - r * 1.3, seg.y - r * 0.45, r * 2.6, r * 0.9, Math.max(8, r * 0.55));
-          record(provenance, "sawtooth", "线条转译", 1);
-        }
-        placed++;
-      }
-    });
-    ctx.restore();
-    return placed;
-  }
-
-  /** 沿轨迹按累计长度 t∈[0,1) 取点、切向与曲率 */
-  function sampleSegment(pts, len, t) {
-    if (len <= 0) return null;
-    const target = t * len;
-    let acc = 0;
-    for (let i = 1; i < pts.length; i++) {
-      const dx = pts[i].x - pts[i - 1].x;
-      const dy = pts[i].y - pts[i - 1].y;
-      const d = Math.hypot(dx, dy);
-      if (acc + d >= target) {
-        const u = d > 0 ? (target - acc) / d : 0;
-        const x = pts[i - 1].x + dx * u;
-        const y = pts[i - 1].y + dy * u;
-        const ang = Math.atan2(dy, dx);
-        // 用前后两段切向差近似曲率
-        const prev = i >= 2 ? Math.atan2(pts[i - 1].y - pts[i - 2].y, pts[i - 1].x - pts[i - 2].x) : ang;
-        let diff = Math.abs(((ang - prev + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-        const curv = Math.min(1, diff / 0.6);
-        return { x, y, ang, curv };
-      }
-      acc += d;
-    }
-    const last = pts[pts.length - 1];
-    return { x: last.x, y: last.y, ang: 0, curv: 0 };
-  }
-
-  function record(provenance, unitId, role, placed) {
-    const u = DB.byId(unitId);
-    if (u) provenance.push({ unit: u, score: 0.6, role, placed });
-  }
-
-  /* ---------------- 间隙装饰：物象之间的留白点缀小型纹样 ---------------- */
-
-  /**
-   * 距离场两遍扫描（近似欧氏距离），找到离主体最远的留白点，
-   * 在那里放小型纹样（打籽点 / 小云 / 小叶），并用细枝牵回主体。
-   * 创新度越高、点缀越多；低创新只保留四角角花。
-   */
-  function decorateGaps(ctx, body, S, color, innovation, provenance) {
-    const inn = innovationLevel(innovation);
-    if (inn === 0) return 0;
-    const dist = distanceField(body, S, S);
-    const thresh = S * 0.032;
-    const minGap = S * (inn === 1 ? 0.26 : inn === 2 ? 0.2 : 0.16);
-    const maxN = inn === 1 ? 3 : inn === 2 ? 6 : 10;
-    const spots = [];
-    const step = Math.max(8, Math.round(S * 0.012));
-    for (let y = step; y < S - step; y += step) {
-      for (let x = step; x < S - step; x += step) {
-        const d = dist[y * S + x];
-        if (d >= thresh) spots.push({ x, y, d });
-      }
-    }
-    spots.sort((a, b) => b.d - a.d);
-    const picked = [];
-    for (const sp of spots) {
-      if (picked.length >= maxN) break;
-      if (picked.some((p) => Math.hypot(p.x - sp.x, p.y - sp.y) < minGap)) continue;
-      picked.push(sp);
-    }
-    if (!picked.length) return 0;
-
-    const D = DB.draw;
-    const lw = Math.max(4, S * 0.0055);
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineCap = "round";
-    let n = 0;
-    picked.forEach((sp) => {
-      const r = Math.max(S * 0.014, Math.min(S * 0.04, sp.d * 0.22));
-      // 大留白放小云，小留白放打籽点
-      if (sp.d > S * 0.07) {
-        D.spiral(ctx, sp.x, sp.y, r * 0.8, 1.5, lw, (n % 2) ? 1 : -1);
-        record(provenance, "cloud-roll", "间隙点缀", 1);
-      } else {
-        ctx.beginPath();
-        D.dotGrid(ctx, sp.x - r, sp.y - r, r * 2, r * 2, r * 0.7, Math.max(2, r * 0.12));
-        ctx.fill();
-        record(provenance, "dot-seed", "间隙点缀", 1);
-      }
-      // 细枝牵回最近主体，防止孤岛
-      const near = nearestOn(body, S, S, sp.x, sp.y);
-      if (near && near.d < S * 0.3) {
-        ctx.lineWidth = Math.max(2.5, S * 0.0035);
-        ctx.beginPath();
-        ctx.moveTo(sp.x, sp.y);
-        ctx.quadraticCurveTo(
-          (sp.x + near.x) / 2 + (near.y - sp.y) * 0.08,
-          (sp.y + near.y) / 2 - (near.x - sp.x) * 0.08,
-          near.x, near.y
-        );
-        ctx.stroke();
-      }
-      n++;
-    });
-    ctx.restore();
-    return n;
-  }
-
-  /** 两遍扫描近似欧氏距离场 */
-  function distanceField(m, w, h) {
-    const BIG = w + h;
-    const d = new Float32Array(w * h);
-    for (let i = 0; i < w * h; i++) d[i] = m[i] ? 0 : BIG;
-    for (let y = 0; y < h; y++) {
-      const row = y * w;
-      for (let x = 0; x < w; x++) {
-        const v = d[row + x];
-        if (x > 0) d[row + x] = Math.min(v, d[row + x - 1] + 1);
-        if (y > 0) d[row + x] = Math.min(d[row + x], d[row - w + x] + 1);
-      }
-      for (let x = w - 1; x >= 0; x--) {
-        const v = d[row + x];
-        if (x < w - 1) d[row + x] = Math.min(v, d[row + x + 1] + 1);
-      }
-    }
-    for (let y = h - 1; y >= 0; y--) {
-      const row = y * w;
-      for (let x = w - 1; x >= 0; x--) {
-        const v = d[row + x];
-        if (x < w - 1) d[row + x] = Math.min(v, d[row + x + 1] + 1);
-        if (y < h - 1) d[row + x] = Math.min(d[row + x], d[row + w + x] + 1);
-      }
-      for (let x = 0; x < w; x++) {
-        const v = d[row + x];
-        if (x > 0) d[row + x] = Math.min(v, d[row + x - 1] + 1);
-      }
-    }
-    return d;
-  }
-
-  function innovationLevel(inn) {
-    if (inn === "low" || inn === 0) return 0;
-    if (inn === "high" || inn === 2) return 2;
-    return 1; // medium 默认
-  }
-
-  /* ---------------- 主流程 ---------------- */
-
-  function compose(studio, opts) {
-    const o = opts || {};
-    const S = o.size || 1024;
-    const tags = o.tags || [];
-    const innovation = o.innovation || "medium";
-    const inn = innovationLevel(innovation);
-    const W = S;
-    const H = S;
-
-    /* 1. 原画 → 墨迹掩码（这是唯一的主体来源） */
-    const inkCv = inkCanvas(studio, S);
-    const inkData = ctxOf(inkCv).getImageData(0, 0, S, S).data;
-    const ink = new Uint8Array(S * S);
-    let inkCount = 0;
-    for (let i = 0, p = 0; i < S * S; i++, p += 4) {
-      if (inkData[p + 3] > 26) { ink[i] = 1; inkCount++; }
-    }
-    if (inkCount < 40) return null;
-
-    /* 2. 加粗到可剪线宽；笔迹围合的空洞填红 —— 主体成型 */
-    const strokeR = Math.max(3, Math.round(S * 0.0042));
-    const thick = dilate(ink, W, H, strokeR);
-    const outside = markOutside(thick, W, H);
-
-    // 手画的圈几乎不会严丝合缝。额外收拢一圈再判「是否围合」，
-    // 让收笔处十几二十像素的缺口也能被认成闭合；随后把内部区域膨胀回原位，
-    // 既不改变可见线宽，也不会在笔迹与红面之间留白缝。
-    const sealR = Math.max(4, Math.round(S * 0.006));
-    const sealed = dilate(thick, W, H, sealR);
-    const outsideSealed = markOutside(sealed, W, H);
-    const enclosedSealed = new Uint8Array(S * S);
-    for (let i = 0; i < S * S; i++) {
-      if (!sealed[i] && !outsideSealed[i]) enclosedSealed[i] = 1;
-    }
-    const enclosed = dilate(enclosedSealed, W, H, sealR);
-    let enclosedCount = 0;
-    for (let i = 0; i < S * S; i++) if (enclosed[i]) enclosedCount++;
-
-    const body = new Uint8Array(S * S);
-    for (let i = 0; i < S * S; i++) body[i] = thick[i] || enclosed[i] ? 1 : 0;
-
-    // 轮廓平滑：闭运算（先膨胀再等量腐蚀）消除像素锯齿，
-    // 让剪纸边缘更像刀刻而不是像素描边；半径很小，不改变识别骨架。
-    const smoothR = Math.max(1, Math.round(S * 0.0025));
-    const bodySmooth = erodeMask(dilate(body, W, H, smoothR), W, H, smoothR);
-    for (let i = 0; i < S * S; i++) body[i] = bodySmooth[i];
-
-    /* 3. 主体画布：红纸阳刻主体 */
-    const bodyCv = mk(S);
-    const bctx = ctxOf(bodyCv);
-    const red = "#a8332a";
-    const bimg = bctx.createImageData(S, S);
-    for (let i = 0, p = 0; i < S * S; i++, p += 4) {
-      if (body[i]) {
-        bimg.data[p] = 168; bimg.data[p + 1] = 51; bimg.data[p + 2] = 42;
-        bimg.data[p + 3] = 255;
-      }
-    }
-    bctx.putImageData(bimg, 0, 0);
-
-    /* 4. 主体内部：按区域形状检索纹样并镂空 */
-    const provenance = [];
-    const encLabel = label(enclosed, W, H, 1);
-    const minArea = S * S * 0.0016;
-    const punched = [];
-
-    for (let k = 0; k < encLabel.stats.length; k++) {
-      const st = encLabel.stats[k];
-      if (st.area < minArea) continue;
-
-      const region = describeRegion(st, S);
-      region.tags = tags;
-      const ranked = DB.retrieve(region, 3);
-      if (!ranked.length) continue;
-      const pick = ranked[0];
-
-      // 先把该区域向内收缩一个安全边距，保证镂空后仍留有红桥
-      const margin = Math.max(7, Math.round(S * 0.012));
-      const regionMask = new Uint8Array(S * S);
-      for (let i = 0; i < S * S; i++) {
-        if (encLabel.labels[i] === k + 1) regionMask[i] = 1;
-      }
-      const holeMask = erodeInside(regionMask, W, H, margin, st);
-
-      // 逐个镂空
-      const holes = mk(S);
-      const hctx = ctxOf(holes);
-      hctx.strokeStyle = "#fff";
-      hctx.fillStyle = "#fff";
-      hctx.lineCap = "round";
-      hctx.lineJoin = "round";
-
-      const placed = layoutFor(region, st, S, margin, pick.unit);
-      // 创新度控制镂空密度：低创新只留中心一枚，中/高创新铺满
-      const keep = inn === 0 ? placed.slice(0, 1) : placed;
-      keep.forEach((d) => punchUnit(hctx, pick.unit, d, S, "#fff"));
-
-      if (holeMask) {
-        const hm = hctx.getImageData(0, 0, S, S);
-        for (let i = 0, p = 3; i < S * S; i++, p += 4) {
-          if (!holeMask[i] && hm.data[p] > 0) hm.data[p] = 0;
-        }
-        hctx.putImageData(hm, 0, 0);
-      }
-
-      bctx.save();
-      bctx.globalCompositeOperation = "destination-out";
-      bctx.drawImage(holes, 0, 0);
-      bctx.restore();
-
-      punched.push({ region, unit: pick.unit, score: pick.score });
-      provenance.push({
-        unit: pick.unit,
-        score: pick.score,
-        region: region,
-        role: "主体内部镂空",
-        placed: keep.length
-      });
-    }
-
-    /* 4.5 主体内部的原始笔迹 → 阴刻刻线
-       用户画在闭合区域里的线条（窗棂、纹理、五官）如果被红面盖住，
-       就等于把原画丢了。这里把它们刻成白线：既是剪纸的「刻线」语法，
-       也让原画的内部结构在成品里继续看得见。 */
-    const carvedPx = carveInnerInk(bctx, ink, outside, S, strokeR);
-
-    /* 4.6 线条转译：把开环长线（云、波浪、斜线等）换成同方向剪纸纹样，
-       让成品不再是「红色简笔画」，而是有剪纸语言的线。只画在主体红线上方。 */
-    const lineStrokes = mapStrokes(studio, S);
-    const linePlaced = decorateLines(bctx, lineStrokes, S, red, innovation, provenance);
-
-    /* 5. 边角 + 间隙点缀 + 边框 */
-    const gapCv = mk(S);
-    const gctx = ctxOf(gapCv);
-    gctx.strokeStyle = red;
-    gctx.fillStyle = red;
-    gctx.lineCap = "round";
-    gctx.lineJoin = "round";
-    decorateCorners(gctx, S, red, provenance);
-
-    // 间隙装饰：物象之间的留白放小型纹样（打籽点 / 小云），
-    // 用细枝牵回主体，保证可剪。低创新跳过。
-    const gapPlaced = decorateGaps(gctx, body, S, red, innovation, provenance);
-
-    /* 6. 边框 + 连接筋：主体到边框最多两根短枝，不做四向放射 */
-    drawFrame(gctx, S, red);
-    const stems = connectBody(gctx, body, S, red);
-    provenance.push({
-      unit: DB.byId("meander"),
-      score: 0.7,
-      role: "外框边饰",
-      placed: 1
-    });
-
-    /* 7. 合成 + 连通性校正（孤岛补桥，保证是一整片可剪的纸） */
-    bctx.drawImage(gapCv, 0, 0);
-    const checks = ensureConnected(bctx, S, red, ink);
-
-    /* 8. 长卷纸面 + 刀口 + 落影 */
-    const out = mk(S);
-    const octx = ctxOf(out);
-    paintPaper(octx, S);
-    octx.save();
-    octx.shadowColor = "rgba(52, 34, 22, 0.34)";
-    octx.shadowBlur = S * 0.014;
-    octx.shadowOffsetY = S * 0.004;
-    octx.drawImage(bodyCv, 0, 0);
-    octx.restore();
-
-    // 纸纤维与暖光
-    fiber(octx, S);
-
-    /* 9. 关联度：全部由像素统计得出，不用估计 */
-    const corp = correlation({ ink, body, S, inkCount, components: checks.components });
-
+  /** 镂空的区域描述，供纹样库六维检索 */
+  function holeRegion(a, ringR, r, S) {
+    const large = r > S * 0.075;
     return {
-      canvas: out,
-      dataURL: out.toDataURL("image/png"),
-      provenance,
-      correlation: corp,
-      checks,
-      pixels: {
-        inkShare: inkCount / (S * S),
-        enclosedShare: enclosedCount / (S * S),
-        carvedShare: carvedPx / (S * S)
-      },
-      stats: {
-        inkPx: inkCount,
-        enclosedPx: enclosedCount,
-        enclosedRegions: encLabel.stats.length,
-        filledRegions: punched.length,
-        carvedPx: carvedPx,
-        stems: stems,
-        components: checks.components,
-        linePlaced: linePlaced,
-        gapPlaced: gapPlaced,
-        innovation: innovation
-      }
+      shape: "round",
+      zone: "inner",
+      curve: 0.62,
+      angular: 0.42,
+      radial: 0.9,
+      linear: 0.12,
+      density: large ? 0.7 : 0.44,
+      sizeClass: large ? "large" : "small",
+      angle: a,
+      inradius: r,
+      area: Math.PI * r * r
     };
   }
 
   /**
-   * 主体内部的原始笔迹刻成白线。
-   * 只在离外轮廓两个笔宽以外的地方刻，保证刻线不会一路刻到边缘，
-   * 把主体切成几块掉下来。
+   * 团花心：在最厚实处开一朵放射花心——一个圆孔，外围一圈八瓣柳叶刻线。
+   * 所有切口都是彼此独立的镂空，切口之间留足红桥，不会切出无主的红岛。
    */
-  function carveInnerInk(bctx, ink, outside, S, strokeR) {
-    const buffer = S * S;
-    const nearOutside = dilate(outside, S, S, strokeR * 2 + 1);
-    const cv = mk(S);
-    const c = ctxOf(cv);
-    const img = c.createImageData(S, S);
-    let n = 0;
-    for (let i = 0, p = 0; i < buffer; i++, p += 4) {
-      if (ink[i] && !nearOutside[i]) {
-        img.data[p] = 255;
-        img.data[p + 1] = 255;
-        img.data[p + 2] = 255;
-        img.data[p + 3] = 255;
-        n++;
+  function addCenterRosette(ctx, mask, S, inn, avoid) {
+    const bb = bboxOf(mask, S, S);
+    if (!bb.count) return 0;
+
+    const inv = new Uint8Array(S * S);
+    for (let i = 0; i < S * S; i++) inv[i] = mask[i] ? 0 : 1;
+    const dist = distanceField(inv, S, S);
+
+    let best = 0, bx = 0, by = 0;
+    for (let y = 1; y < S - 1; y++) {
+      const row = y * S;
+      for (let x = 1; x < S - 1; x++) {
+        if (!mask[row + x]) continue;
+        if (dist[row + x] > best) { best = dist[row + x]; bx = x; by = y; }
       }
     }
-    if (!n) return 0;
-    c.putImageData(img, 0, 0);
-    bctx.save();
-    bctx.globalCompositeOperation = "destination-out";
-    bctx.drawImage(cv, 0, 0);
-    bctx.restore();
-    return n;
+    if (best < S * 0.05) return 0;
+
+    const r = Math.min(S * (inn === 0 ? 0.085 : 0.115), best * 0.52);
+    if (r < S * 0.032) return 0;
+
+    ctx.save();
+    ctx.fillStyle = "#fff";
+    // 花心圆孔
+    ctx.beginPath();
+    ctx.arc(bx, by, r * 0.26, 0, TAU);
+    ctx.fill();
+    // 八瓣放射刻线（尾端留红，像太阳纹的芒）
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU;
+      ctx.save();
+      ctx.translate(bx + Math.cos(a) * r * 0.74, by + Math.sin(a) * r * 0.74);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 0.28, r * 0.105, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+
+    if (avoid) avoid.push({ x: bx, y: by, r: r * 1.1 });
+    return 1;
   }
 
   /**
-   * 区域内缩：真正决定镂空安全边距的是「区域内缩后」的像素。
-   * 只在区域的包围盒（外扩 margin）里做膨胀，避免每次扫全画布。
+   * 在红面上打孔：沿「离边界最远的厚实处」寻找局部极大点，
+   * 保证每个孔四周都留足红桥（可剪），并按创新度控制数量与大小；
+   * 中等/高创新会把已选孔做一次左右镜像，补足剪纸的对称语感。
    */
-  function erodeInside(mask, w, h, r, st) {
-    const x0 = Math.max(0, st.minX - r - 1);
-    const y0 = Math.max(0, st.minY - r - 1);
-    const x1 = Math.min(w - 1, st.maxX + r + 1);
-    const y1 = Math.min(h - 1, st.maxY + r + 1);
-    const bw = x1 - x0 + 1;
-    const bh = y1 - y0 + 1;
+  function punchHoles(ctx, mask, S, inn, provenance, avoid) {
+    const bb = bboxOf(mask, S, S);
+    if (!bb.count) return 0;
 
-    const comp = new Uint8Array(bw * bh);
-    for (let y = 0; y < bh; y++) {
-      for (let x = 0; x < bw; x++) {
-        comp[y * bw + x] = mask[(y + y0) * w + (x + x0)] ? 0 : 1;
+    const inv = new Uint8Array(S * S);
+    for (let i = 0; i < S * S; i++) inv[i] = mask[i] ? 0 : 1;
+    const distIn = distanceField(inv, S, S);
+
+    const minD = S * 0.022;
+    const step = Math.max(8, Math.round(S * 0.05));
+    const cands = [];
+    for (let y = Math.round(step / 2); y < S; y += step) {
+      const row = y * S;
+      for (let x = Math.round(step / 2); x < S; x += step) {
+        const d = distIn[row + x];
+        if (d < minD) continue;
+        cands.push({ x, y, d });
       }
     }
-    const grown = dilate(comp, bw, bh, r);
+    cands.sort((a, b) => b.d - a.d);
 
-    const out = new Uint8Array(w * h);
-    for (let y = 0; y < bh; y++) {
-      for (let x = 0; x < bw; x++) {
-        const gi = (y + y0) * w + (x + x0);
-        if (mask[gi] && !grown[y * bw + x]) out[gi] = 1;
-      }
+    const limit = inn === 0 ? 3 : inn === 1 ? 9 : 13;
+    const bridge = Math.max(6, Math.round(S * 0.0095));
+    const placed = [];
+
+    const tryPlace = (x, y, d, allowMirror) => {
+      if (placed.length >= limit) return;
+      let r = Math.min(
+        S * (inn === 0 ? 0.06 : inn === 1 ? 0.072 : 0.082),
+        d * 0.62,
+        d - bridge
+      );
+      if (r < S * 0.02) return;
+      if (avoid && avoid.some((a) => Math.hypot(a.x - x, a.y - y) < a.r + r * 1.15)) return;
+      if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < (p.r + r) * 1.22)) return;
+
+      const a = Math.atan2(y - bb.cy, x - bb.cx);
+      const ranked = DB.retrieve(holeRegion(a, Math.hypot(x - bb.cx, y - bb.cy), r, S), 3);
+      const unit = ranked.length ? ranked[0].unit : DB.byId("chrysanthemum");
+      punchUnit(ctx, unit, { x, y, r, angle: a }, S, "#fff");
+      provenance.push({
+        unit,
+        score: ranked.length ? ranked[0].score : 0.6,
+        role: "主体内部镂空",
+        placed: 1
+      });
+      placed.push({ x, y, r });
+
+      if (!allowMirror) return;
+      const mx = Math.round(2 * bb.cx - x);
+      const my = y;
+      if (mx < 1 || mx >= S - 1) return;
+      const md = distIn[my * S + mx];
+      if (md < r + bridge) return;
+      if (placed.some((p) => Math.hypot(p.x - mx, p.y - my) < (p.r + r) * 1.22)) return;
+      const ma = Math.atan2(my - bb.cy, mx - bb.cx);
+      punchUnit(ctx, unit, { x: mx, y: my, r, angle: ma }, S, "#fff");
+      provenance.push({ unit, score: ranked.length ? ranked[0].score : 0.6, role: "主体内部镂空", placed: 1 });
+      placed.push({ x: mx, y: my, r });
+    };
+
+    cands.forEach((c) => tryPlace(c.x, c.y, c.d, inn >= 1));
+    return placed.length;
+  }
+
+  /* ---------------- 传统团花环饰 ---------------- */
+
+  /** 只保留最大的连通块，避免主体旁边残留碎片被桥接成一堆电线 */
+  function largestOnly(mask, S) {
+    const lab = label(mask, S, S, 1);
+    if (lab.count <= 1) return mask;
+    let mi = 0;
+    for (let i = 1; i < lab.stats.length; i++) {
+      if (lab.stats[i].area > lab.stats[mi].area) mi = i;
     }
+    const out = new Uint8Array(S * S);
+    const want = mi + 1;
+    for (let i = 0; i < S * S; i++) if (lab.labels[i] === want) out[i] = 1;
     return out;
   }
 
+  function unionMask(a, b) {
+    const o = new Uint8Array(a.length);
+    for (let i = 0; i < a.length; i++) o[i] = (a[i] || b[i]) ? 1 : 0;
+    return o;
+  }
+
   /**
-   * 四角压角：角花的根就落在边框的四角中线上，
-   * 所以它和边框天生是连着的，不需要再往画面中央牵线。
+   * 在主体外围加一圈八瓣团花：花瓣与主体有意重叠，天生连成一片，
+   * 让整体从「一块红」变成有花心的传统窗花构图。
+   */
+  function addPetalRing(bctx, mask, S, provenance) {
+    const bb = bboxOf(mask, S, S);
+    if (!bb.count) return { mask: new Uint8Array(S * S), holes: [], count: 0 };
+
+    const R = Math.max(bb.w, bb.h) * 0.5;
+    const petalLen = S * 0.115;
+    const petalW = S * 0.075;
+    const n = 8;
+    const unit = DB.byId("lotus-petal");
+
+    const tmp = mk(S);
+    const tctx = ctxOf(tmp);
+    tctx.fillStyle = RED;
+    const holes = [];
+
+    const hw = bb.w * 0.5, hh = bb.h * 0.5;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU;
+      const dx = Math.cos(a), dy = Math.sin(a);
+      // 沿该方向到主体边缘的距离；花心略微收进主体，让花瓣根部埋进红面
+      const tx = Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity;
+      const ty = Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity;
+      const edge = Math.min(tx, ty);
+      const centerDist = Math.max(R * 0.35, edge * 0.92);
+      const cx = bb.cx + dx * centerDist;
+      const cy = bb.cy + dy * centerDist;
+      // 长短瓣相间，像真团花那样有呼吸，而不是八个一样的耳朵
+      const scale = i % 2 ? 0.84 : 1;
+      const hl = petalLen * 0.5 * scale, hwd = petalW * 0.5 * scale;
+      if (cx - hl < 0 || cy - hwd < 0 || cx + hl > S || cy + hwd > S) continue;
+      tctx.save();
+      tctx.translate(cx, cy);
+      tctx.rotate(a);
+      // 水滴瓣：根部宽厚（埋进主体），尖端收圆，是剪纸花瓣的标准造型
+      tctx.beginPath();
+      tctx.moveTo(-hl, 0);
+      tctx.bezierCurveTo(-hl * 0.25, -hwd, hl * 0.55, -hwd * 0.95, hl * 0.97, -hwd * 0.18);
+      tctx.quadraticCurveTo(hl * 1.02, 0, hl * 0.97, hwd * 0.18);
+      tctx.bezierCurveTo(hl * 0.55, hwd * 0.95, -hl * 0.25, hwd, -hl, 0);
+      tctx.fill();
+      tctx.restore();
+      // 瓣内一道柳叶形阴刻，剪出来是一条细长刀口，而不是把花瓣掏空成圆环
+      holes.push({
+        x: cx + dx * hl * 0.06,
+        y: cy + dy * hl * 0.06,
+        rx: hl * 0.5,
+        ry: hwd * 0.24,
+        a
+      });
+      provenance.push({ unit, score: 0.7, role: "团花环饰", placed: 1 });
+    }
+
+    bctx.drawImage(tmp, 0, 0);
+    const data = tctx.getImageData(0, 0, S, S).data;
+    const ringMask = new Uint8Array(S * S);
+    for (let i = 0, p = 3; i < S * S; i++, p += 4) if (data[p] > 40) ringMask[i] = 1;
+    return { mask: ringMask, holes: holes, count: holes.length };
+  }
+
+  /* ---------------- 红面绘制 ---------------- */
+
+  /**
+   * 沿剪影外缘咬出一圈浅「锯齿/月牙」缺口，是剪纸最典型的刀口语言，
+   * 能把「红色块面」读成「剪出来的纸」。只咬朝向画面外侧、且内里有料的边，
+   * 半径很浅，不会把结构剪断。
+   */
+  function scallopEdge(ctx, mask, S, inn) {
+    const bb = bboxOf(mask, S, S);
+    if (!bb.count) return 0;
+    const spacing = Math.max(12, Math.round(S * (inn === 0 ? 0.11 : inn === 1 ? 0.095 : 0.075)));
+    const rad = Math.max(3, Math.round(S * (inn === 0 ? 0.008 : inn === 1 ? 0.011 : 0.014)));
+    const er = erodeMask(mask, S, S, 1);
+    // 内里的厚度场：只在真正厚实的红面上咬缺口，细瓣、细颈一律不动，
+    // 否则缺口会把花瓣咬断，逼出一堆细碎补桥（正是要避免的「碎线」）。
+    const inv = new Uint8Array(S * S);
+    for (let i = 0; i < S * S; i++) inv[i] = mask[i] ? 0 : 1;
+    const dIn = distanceField(inv, S, S);
+
+    const pts = [];
+    for (let y = 1; y < S - 1; y++) {
+      const row = y * S;
+      for (let x = 1; x < S - 1; x++) {
+        const i = row + x;
+        if (!mask[i] || er[i]) continue;
+        // 只取朝外、且向内 2 倍半径处仍是红的边，避免咬穿细臂
+        const dx = bb.cx - x, dy = bb.cy - y;
+        const len = Math.hypot(dx, dy) || 1;
+        const qx = Math.round(x + (dx / len) * rad * 2.0);
+        const qy = Math.round(y + (dy / len) * rad * 2.0);
+        if (qx < 0 || qy < 0 || qx >= S || qy >= S || !mask[qy * S + qx]) continue;
+        if (dIn[qy * S + qx] < rad * 1.6) continue;
+        pts.push(x, y);
+      }
+    }
+
+    const picked = [];
+    const min2 = spacing * spacing;
+    for (let k = 0; k < pts.length; k += 2) {
+      const x = pts[k], y = pts[k + 1];
+      let ok = true;
+      for (let j = 0; j < picked.length; j++) {
+        const ddx = picked[j].x - x, ddy = picked[j].y - y;
+        if (ddx * ddx + ddy * ddy < min2) { ok = false; break; }
+      }
+      if (ok) picked.push({ x, y });
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "#fff";
+    picked.forEach((p) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, rad, 0, TAU);
+      ctx.fill();
+    });
+    ctx.restore();
+    return picked.length;
+  }
+
+  function paintMaskRed(bctx, mask, S) {
+    const img = bctx.createImageData(S, S);
+    for (let i = 0, p = 0; i < S * S; i++, p += 4) {
+      if (!mask[i]) continue;
+      img.data[p] = RED_RGB[0];
+      img.data[p + 1] = RED_RGB[1];
+      img.data[p + 2] = RED_RGB[2];
+      img.data[p + 3] = 255;
+    }
+    bctx.putImageData(img, 0, 0);
+  }
+
+  /* ---------------- 边框、角花、连接筋 ---------------- */
+
+  /**
+   * 四角压角：角花的根落在边框四角中线上，与边框天生相连。
    */
   function decorateCorners(ctx, S, color, provenance) {
     const inset = S * FRAME_INSET;
@@ -774,8 +767,43 @@
   }
 
   /**
-   * 连接筋：从主体最靠近边框的两处引出短枝搭到边框上。
-   * 最多两根、长度受限、带一片叶子——像长出来的枝，而不是放射状的辐条。
+   * 外框：一条闭合矩形边线 + 四角回纹钩。
+   */
+  function drawFrame(ctx, S, color) {
+    const inset = S * FRAME_INSET;
+    const w = S - inset * 2;
+    const lw = Math.max(5, S * 0.012);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lw;
+    ctx.lineJoin = "miter";
+    ctx.strokeRect(inset, inset, w, w);
+
+    const hook = S * 0.055;
+    ctx.lineWidth = Math.max(4, lw * 0.62);
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "miter";
+    const corners = [
+      [inset, inset, 1, 1],
+      [S - inset, inset, -1, 1],
+      [inset, S - inset, 1, -1],
+      [S - inset, S - inset, -1, -1]
+    ];
+    corners.forEach(([x, y, dx, dy]) => {
+      ctx.beginPath();
+      ctx.moveTo(x, y + dy * hook * 0.55);
+      ctx.lineTo(x + dx * hook * 0.55, y + dy * hook * 0.55);
+      ctx.lineTo(x + dx * hook * 0.55, y + dy * hook);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  /**
+   * 连接筋：只在离边框最近的一侧引一根短粗枝，把主体搭到边框上。
+   * 不做横贯画面的长连线——那是剪纸里最忌讳的「多余交叉」。
    */
   function connectBody(ctx, body, S, color) {
     const inset = S * FRAME_INSET;
@@ -794,129 +822,57 @@
       bottom && { from: bottom, to: { x: bottom.x, y: S - inset }, d: S - inset - bottom.y, vertical: true },
       left && { from: left, to: { x: inset, y: left.y }, d: left.x - inset, vertical: false },
       right && { from: right, to: { x: S - inset, y: right.y }, d: S - inset - right.x, vertical: false }
-    ].filter((c) => c && c.d > S * 0.012).sort((a, b) => a.d - b.d);
+    ].filter((c) => c && c.d > S * 0.008).sort((a, b) => {
+      // 同等距离下优先上下向（竖向搭桥更稳、不横穿留白）
+      const av = a.d - (a.vertical ? S * 0.012 : 0);
+      const bv = b.d - (b.vertical ? S * 0.012 : 0);
+      return av - bv;
+    });
 
-    // 只取最近的两处，且不能远到横穿半幅画面
-    const picked = cands.slice(0, 2).filter((c) => c.d < S * 0.34);
-    if (!picked.length) return 0;
+    const c = cands[0];
+    if (!c || c.d > S * 0.3) return 0;
 
     ctx.save();
-    ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineCap = "round";
-    ctx.lineWidth = Math.max(5, S * 0.0072);
-    picked.forEach((c) => {
-      const mx = (c.from.x + c.to.x) / 2;
-      const my = (c.from.y + c.to.y) / 2;
-      const bend = c.d * 0.16;
-      const bx = c.vertical ? bend : 0;
-      const by = c.vertical ? 0 : bend;
-      ctx.beginPath();
-      ctx.moveTo(c.to.x, c.to.y);
-      ctx.quadraticCurveTo(mx + bx, my + by, c.from.x, c.from.y);
-      ctx.stroke();
-      // 枝头一片小叶，让这根筋看起来是长出来的
-      DB.draw.leaf(ctx, mx + bx, my + by, S * 0.05, S * 0.017,
-        c.vertical ? 0 : Math.PI / 2);
-    });
+    // 一段由粗到细的「藤蔓」根系：根部约 4.5% 画布宽，到边框收窄到 2.4%，
+    // 比等粗直线更像剪出来的枝，不会读成一根电线。
+    const wBody = S * 0.045;
+    const wFrame = S * 0.024;
+    const vx = c.to.x - c.from.x;
+    const vy = c.to.y - c.from.y;
+    const vl = Math.hypot(vx, vy) || 1;
+    const nx = -vy / vl;
+    const ny = vx / vl;
+    const mx = (c.from.x + c.to.x) / 2;
+    const my = (c.from.y + c.to.y) / 2;
+    const bend = c.d * 0.1;
+    const cx = mx + (c.vertical ? bend : 0);
+    const cy = my + (c.vertical ? 0 : bend);
+    const k = 0.45;
+
+    ctx.beginPath();
+    ctx.moveTo(c.from.x + nx * wBody * 0.5, c.from.y + ny * wBody * 0.5);
+    ctx.quadraticCurveTo(
+      cx + nx * wBody * 0.5 * k, cy + ny * wBody * 0.5 * k,
+      c.to.x + nx * wFrame * 0.5, c.to.y + ny * wFrame * 0.5
+    );
+    ctx.lineTo(c.to.x - nx * wFrame * 0.5, c.to.y - ny * wFrame * 0.5);
+    ctx.quadraticCurveTo(
+      cx - nx * wBody * 0.5 * k, cy - ny * wBody * 0.5 * k,
+      c.from.x - nx * wBody * 0.5, c.from.y - ny * wBody * 0.5
+    );
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
-    return picked.length;
-  }
-
-  /** 某一区域内的落位方案 */
-  function layoutFor(region, st, S, margin, unit) {
-    const out = [];
-    const cx = st.cx, cy = st.cy;
-    const short = Math.min(st.bw, st.bh) * 0.5 - margin * 1.1;
-
-    if (region.shape === "elongated") {
-      const n = Math.max(2, Math.min(5, Math.round(Math.max(st.bw, st.bh) / (S * 0.075))));
-      const along = st.bw >= st.bh;
-      const span = along ? st.bw : st.bh;
-      for (let i = 0; i < n; i++) {
-        const t = (i + 0.5) / n - 0.5;
-        out.push({
-          x: cx + (along ? t * span * 0.82 : 0),
-          y: cy + (along ? 0 : t * span * 0.82),
-          r: Math.max(S * 0.018, Math.min(short * 0.7, S * 0.06)),
-          angle: (along ? 0 : Math.PI / 2) + st.angle
-        });
-      }
-      return out;
-    }
-
-    if (region.shape === "corner") {
-      out.push({
-        x: cx, y: cy,
-        r: Math.max(S * 0.03, Math.min(short * 0.9, S * 0.11)),
-        dx: cx < S / 2 ? 1 : -1,
-        dy: cy < S / 2 ? 1 : -1
-      });
-      return out;
-    }
-
-    // 团块：中心一朵，边缘补一圈打籽
-    const r = Math.max(S * 0.03, Math.min(short * 0.86, S * 0.12));
-    out.push({ x: cx, y: cy, r, angle: st.angle });
-    if (short > S * 0.075) {
-      const dots = Math.min(3, 1 + Math.round(short / (S * 0.05)));
-      for (let i = 0; i < dots; i++) {
-        const a = st.angle + Math.PI * 0.25 + (i / dots) * TAU;
-        out.push({
-          x: cx + Math.cos(a) * short * 0.62,
-          y: cy + Math.sin(a) * short * 0.62,
-          r: Math.max(S * 0.016, short * 0.22),
-          angle: a
-        });
-      }
-    }
-    return out;
-  }
-
-  /**
-   * 外框：一条闭合的矩形边线 + 四角回纹钩。
-   * 回纹钩的起点压在边框的中线上，保证与边框真正相交（差半个线宽就会断成孤岛）。
-   */
-  function drawFrame(ctx, S, color) {
-    const inset = S * FRAME_INSET;
-    const w = S - inset * 2;
-    const lw = Math.max(5, S * 0.012);
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = lw;
-    ctx.lineJoin = "miter";
-    ctx.strokeRect(inset, inset, w, w);
-
-    // 四角回纹钩：起点在边框中线上，天然与边框连成一体
-    const hook = S * 0.055;
-    ctx.lineWidth = Math.max(4, lw * 0.62);
-    ctx.lineCap = "butt";
-    ctx.lineJoin = "miter";
-    const corners = [
-      [inset, inset, 1, 1],
-      [S - inset, inset, -1, 1],
-      [inset, S - inset, 1, -1],
-      [S - inset, S - inset, -1, -1]
-    ];
-    corners.forEach(([x, y, dx, dy]) => {
-      ctx.beginPath();
-      // 先从边框中线往里折一段
-      ctx.moveTo(x, y + dy * hook * 0.55);
-      ctx.lineTo(x + dx * hook * 0.55, y + dy * hook * 0.55);
-      ctx.lineTo(x + dx * hook * 0.55, y + dy * hook);
-      ctx.stroke();
-    });
-    ctx.restore();
+    return 1;
   }
 
   /**
    * 连通性：孤岛补桥，保证是一整片能剪的纸。
-   * 桥只画在近处（远距离硬连会横穿用户画面）；太小的非笔迹碎点直接清掉。
-   * 返回值是补桥之后的真实连通域数。
+   * keep = 主体剪影掩码（缩放后），属于主体的分量一律保留并补桥；
+   * 非主体（边框角花之外的游离装饰）才允许清理。
    */
-  function ensureConnected(bctx, S, color, ink) {
+  function ensureConnected(bctx, S, color, keep) {
     const sample = () => {
       const img = bctx.getImageData(0, 0, S, S);
       const m = new Uint8Array(S * S);
@@ -927,17 +883,15 @@
     const lab = label(sample(), S, S, 1);
     if (lab.count <= 1) return { islands: 0, bridged: 0, dropped: 0, components: lab.count };
 
-    // 一次性统计每个连通域里有多少「用户笔迹」像素——笔迹永远不删
     const inkByLabel = new Int32Array(lab.count + 1);
     for (let i = 0; i < S * S; i++) {
-      if (lab.labels[i] && ink[i]) inkByLabel[lab.labels[i]]++;
+      if (lab.labels[i] && keep[i]) inkByLabel[lab.labels[i]]++;
     }
 
     let mainIdx = 0;
     for (let i = 1; i < lab.stats.length; i++) {
       if (lab.stats[i].area > lab.stats[mainIdx].area) mainIdx = i;
     }
-    // 主分量的真实像素掩码：包围盒会覆盖整幅（边框就是这样），不能用来量距离
     const mainMask = new Uint8Array(S * S);
     for (let i = 0; i < S * S; i++) {
       if (lab.labels[i] === mainIdx + 1) mainMask[i] = 1;
@@ -946,40 +900,56 @@
     let bridged = 0;
     let dropped = 0;
     bctx.save();
-    bctx.fillStyle = color;
     bctx.strokeStyle = color;
     bctx.lineCap = "round";
     for (let i = 0; i < lab.stats.length; i++) {
       if (i === mainIdx) continue;
       const st = lab.stats[i];
       const hasInk = inkByLabel[i + 1] > 0;
-      const near = nearestOn(mainMask, S, S, st.cx, st.cy);
+      // 用连通块内真实红像素作为起点（质心可能落在镂空里，导致补桥落空）
+      const sx0 = st.ax != null ? st.ax : st.cx;
+      const sy0 = st.ay != null ? st.ay : st.cy;
+      const near = nearestOn(mainMask, S, S, sx0, sy0);
       const gap = near ? near.d : Infinity;
 
-      // 近处：补一根弯枝把孤岛拉回主体（带叶，不像硬连线）
-      if (near && gap <= S * 0.26) {
-        const mx = (st.cx + near.x) / 2;
-        const my = (st.cy + near.y) / 2;
-        const nx = -(near.y - st.cy);
-        const ny = near.x - st.cx;
+      if (hasInk) {
+        // 含用户笔迹的分量必须保留并补桥，可剪性优先
+        const tx = near ? near.x : sx0 + (sx0 < S / 2 ? S * 0.1 : -S * 0.1);
+        const ty = near ? near.y : sy0;
+        const mx = (sx0 + tx) / 2;
+        const my = (sy0 + ty) / 2;
+        const nx = -(ty - sy0);
+        const ny = tx - sx0;
         const len = Math.hypot(nx, ny) || 1;
-        const bend = Math.min(S * 0.025, gap * 0.2);
-        bctx.lineWidth = Math.max(5, S * 0.0062);
+        const bend = Math.min(S * 0.03, gap * 0.2);
+        // 红桥做到 2% 画布宽：印成 A4 约 3–4mm，剪刀能过，不会读成一根发丝
+        bctx.lineWidth = Math.max(12, S * 0.02);
         bctx.beginPath();
-        bctx.moveTo(st.cx, st.cy);
-        bctx.quadraticCurveTo(mx + (nx / len) * bend, my + (ny / len) * bend, near.x, near.y);
+        bctx.moveTo(sx0, sy0);
+        bctx.quadraticCurveTo(mx + (nx / len) * bend, my + (ny / len) * bend, tx, ty);
         bctx.stroke();
         bridged++;
         continue;
       }
 
-      // 远处：只有「不是用户画的东西」才清掉，笔迹一律保留
-      if (!hasInk && st.area < 48) {
-        bctx.globalCompositeOperation = "destination-out";
-        bctx.fillRect(st.minX - 1, st.minY - 1, st.bw + 2, st.bh + 2);
-        bctx.globalCompositeOperation = "source-over";
-        dropped++;
+      // 非笔迹的装饰碎块：只有非常贴近主体时补一根短枝，否则直接清掉，
+      // 避免为远处的装饰拉出横贯画面的多余连线。
+      if (gap <= S * 0.04 && st.area >= 12) {
+        if (near) {
+          bctx.lineWidth = Math.max(8, S * 0.012);
+          bctx.beginPath();
+          bctx.moveTo(sx0, sy0);
+          bctx.lineTo(near.x, near.y);
+          bctx.stroke();
+        }
+        bridged++;
+        continue;
       }
+
+      bctx.globalCompositeOperation = "destination-out";
+      bctx.fillRect(st.minX - 1, st.minY - 1, st.bw + 2, st.bh + 2);
+      bctx.globalCompositeOperation = "source-over";
+      dropped++;
     }
     bctx.restore();
 
@@ -1020,7 +990,6 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, S, S);
 
-    // 淡淡的晕
     const r = ctx.createRadialGradient(S * 0.28, S * 0.2, 0, S * 0.28, S * 0.2, S * 0.9);
     r.addColorStop(0, "rgba(255,255,255,0.75)");
     r.addColorStop(1, "rgba(255,255,255,0)");
@@ -1044,7 +1013,6 @@
     }
     ctx.restore();
 
-    // 纸边压暗
     const v = ctx.createRadialGradient(S / 2, S / 2, S * 0.32, S / 2, S / 2, S * 0.78);
     v.addColorStop(0, "rgba(0,0,0,0)");
     v.addColorStop(1, "rgba(70,50,30,0.16)");
@@ -1052,65 +1020,196 @@
     ctx.fillRect(0, 0, S, S);
   }
 
-  /* ---------------- 关联度 ---------------- */
+  /* ---------------- 关联度（构图呼应，而非逐笔复制） ---------------- */
 
-  /**
-   * 全部指标由像素统计得出：
-   *   skeleton     主骨架保留率（原笔迹有多少仍落在成品红纸上）
-   *   contour      包围盒吻合（成品主体包围盒 vs 原画笔迹包围盒）
-   *   blank        留白保持（装饰与红面增量占画面的比例，越少越不喧宾夺主）
-   *   craft        刀路连贯（整幅是否连成一片、有无孤岛）
-   * 另附 shiftPx：原画与成品包围盒中心的偏移。
-   */
-  function correlation(a) {
-    const { ink, body, S, inkCount, components } = a;
-    const total = S * S;
-
-    // 主骨架保留：原笔迹像素中仍落在成品红纸上的比例
-    let kept = 0;
-    for (let i = 0; i < total; i++) if (ink[i] && body[i]) kept++;
-    const skeleton = inkCount ? kept / inkCount : 0;
-
-    // 包围盒（顺便取中心，用来算偏移）
-    let ix0 = S, iy0 = S, ix1 = 0, iy1 = 0;
-    let ox0 = S, oy0 = S, ox1 = 0, oy1 = 0;
-    let bodyCount = 0;
+  function quadShares(m, S) {
+    const q = [0, 0, 0, 0];
+    let t = 0;
+    const half = S / 2;
     for (let y = 0; y < S; y++) {
+      const row = y * S;
+      const dy = y < half ? 0 : 2;
       for (let x = 0; x < S; x++) {
-        const i = y * S + x;
-        if (ink[i]) {
-          if (x < ix0) ix0 = x; if (x > ix1) ix1 = x;
-          if (y < iy0) iy0 = y; if (y > iy1) iy1 = y;
-        }
-        if (body[i]) {
-          bodyCount++;
-          if (x < ox0) ox0 = x; if (x > ox1) ox1 = x;
-          if (y < oy0) oy0 = y; if (y > oy1) oy1 = y;
-        }
+        if (!m[row + x]) continue;
+        q[dy + (x < half ? 0 : 1)]++;
+        t++;
       }
     }
-    const iw = ix1 - ix0 + 1, ih = iy1 - iy0 + 1;
-    const ow = ox1 - ox0 + 1, oh = oy1 - oy0 + 1;
-    const contour = Math.max(0, 1 - (Math.abs(ow - iw) / Math.max(1, iw) * 0.5 +
-                                      Math.abs(oh - ih) / Math.max(1, ih) * 0.5));
-    const shift = Math.hypot((ix0 + ix1) / 2 - (ox0 + ox1) / 2,
-                             (iy0 + iy1) / 2 - (oy0 + oy1) / 2) / S;
+    return t ? q.map((v) => v / t) : [0, 0, 0, 0];
+  }
 
-    // 留白：红面相对原笔迹的增量占画面的比例，越少越「不喧宾夺主」
-    const blank = Math.max(0, 1 - Math.max(0, bodyCount - kept) / (total * 0.32));
+  function cosine(a, b) {
+    let dot = 0, aa = 0, bb = 0;
+    for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i]; }
+    if (!aa || !bb) return 0;
+    return dot / Math.sqrt(aa * bb);
+  }
 
-    // 刀路连贯：整幅连成一片才是能剪下来的纸
-    const craft = components === 1 ? 1 : components === 2 ? 0.82 : 0.68;
+  /**
+   * 关联度改成「构图呼应」：
+   *   pose   重心呼应（成品主体重心 vs 原画重心）
+   *   extent 体量吻合（包围盒长宽比与占幅）
+   *   mass   分区呼应（四象限笔墨分布的余弦相似度）
+   *   craft  刀路连贯（是否连成一片）
+   */
+  function correlation(a) {
+    const { ink, body, S, components } = a;
+    const ib = bboxOf(ink, S, S);
+    const ob = bboxOf(body, S, S);
 
-    const totalScore = skeleton * 0.42 + contour * 0.2 + blank * 0.2 + craft * 0.18;
+    const shift = Math.hypot(ib.cx - ob.cx, ib.cy - ob.cy);
+    const pose = Math.max(0, 1 - shift / (S * 0.32));
+
+    const ew = Math.min(ib.w, ob.w) / Math.max(1, Math.max(ib.w, ob.w));
+    const eh = Math.min(ib.h, ob.h) / Math.max(1, Math.max(ib.h, ob.h));
+    const extent = (ew + eh) / 2;
+
+    const mass = cosine(quadShares(ink, S), quadShares(body, S));
+    const craft = components === 1 ? 1 : components === 2 ? 0.82 : 0.66;
+
+    const total = pose * 0.34 + extent * 0.24 + mass * 0.2 + craft * 0.22;
 
     return {
-      skeleton: Math.round(skeleton * 100),
-      contour: Math.round(contour * 100),
-      blank: Math.round(blank * 100),
+      pose: Math.round(pose * 100),
+      extent: Math.round(extent * 100),
+      mass: Math.round(mass * 100),
       craft: Math.round(craft * 100),
-      total: Math.round(totalScore * 100),
-      shiftPx: Math.round(shift * S)
+      total: Math.round(total * 100),
+      shiftPx: Math.round(shift)
+    };
+  }
+
+  /* =========================================================
+     主流程
+     ========================================================= */
+
+  function compose(studio, opts) {
+    const o = opts || {};
+    const S = o.size || 1024;
+    const innovation = o.innovation || "medium";
+    const inn = innovationLevel(innovation);
+
+    /* 1. 笔迹掩码（只作为「概括」的输入，不再直接当主体） */
+    const inkCv = inkCanvas(studio, S);
+    const inkData = ctxOf(inkCv).getImageData(0, 0, S, S).data;
+    const ink = new Uint8Array(S * S);
+    let inkCount = 0;
+    for (let i = 0, p = 0; i < S * S; i++, p += 4) {
+      if (inkData[p + 3] > 26) { ink[i] = 1; inkCount++; }
+    }
+    if (inkCount < 40) return null;
+
+    /* 2. 概括成块面剪影；笔迹太少则退化为「以原画为种子」的传统团花 */
+    const rawSil = buildSilhouette(ink, S, inn);
+    // 再开一次大半径运算：细于约 2r 的带状/涂鸦笔画会被整条消掉，
+    // 只留下有厚度的块面，避免加粗后变成一条红绸带。
+    const deStroke = openMask(rawSil, S, S, Math.max(3, Math.round(S * (inn === 0 ? 0.008 : inn === 2 ? 0.014 : 0.012))));
+    const massSil = filterMasses(deStroke, S);
+    // 邻近的块面用一次闭运算直接连成一体（厚连接），少靠细线去补
+    const merged = closeMask(massSil, S, S, Math.max(4, Math.round(S * 0.03)));
+    const norm = normalizeSilhouette(merged, S, 0.78);
+    let mask = norm.mask;
+    let mode = "silhouette";
+
+    const coverage = norm.count / (S * S);
+    if (coverage < 0.012) {
+      const ib = bboxOf(ink, S, S);
+      const cx = ib.count ? ib.cx : S / 2;
+      const cy = ib.count ? ib.cy : S / 2;
+      const R = Math.max(S * 0.16, Math.min(S * 0.27, Math.max(ib.w, ib.h) * 0.5));
+      const med = medallionMask(S, cx, cy, R);
+      mask = med.mask;
+      mode = "medallion";
+    }
+
+    /* 3. 阳刻红面：只保留最大主体，旁边碎片一律不要，避免后续电线式补桥 */
+    mask = largestOnly(mask, S);
+    const provenance = [];
+
+    const bodyCv = mk(S);
+    const bctx = ctxOf(bodyCv);
+    paintMaskRed(bctx, mask, S);
+    const scallops = scallopEdge(bctx, mask, S, inn);
+
+    /* 3.5 八瓣团花环饰：与主体重叠，天生连成一片 */
+    const ring = addPetalRing(bctx, mask, S, provenance);
+    const keep = unionMask(mask, ring.mask);
+
+    /* 4. 阴刻镂空：纹样取自素材库 */
+    const holeCv = mk(S);
+    const hctx = ctxOf(holeCv);
+    hctx.strokeStyle = "#fff";
+    hctx.fillStyle = "#fff";
+    hctx.lineCap = "round";
+    hctx.lineJoin = "round";
+    // 先开一朵团花心，再在其余厚实处补库里的纹样镂空，避免互相打架
+    const avoid = [];
+    const rosette = addCenterRosette(hctx, mask, S, inn, avoid);
+    const holeCount = punchHoles(hctx, mask, S, inn, provenance, avoid);
+    hctx.fillStyle = "#fff";
+    ring.holes.forEach((h) => {
+      hctx.beginPath();
+      hctx.ellipse(h.x, h.y, h.rx, h.ry, h.a, 0, TAU);
+      hctx.fill();
+    });
+    bctx.save();
+    bctx.globalCompositeOperation = "destination-out";
+    bctx.drawImage(holeCv, 0, 0);
+    bctx.restore();
+
+    /* 5. 边框 + 四角角花 + 连接筋 */
+    const gapCv = mk(S);
+    const gctx = ctxOf(gapCv);
+    gctx.strokeStyle = RED;
+    gctx.fillStyle = RED;
+    gctx.lineCap = "round";
+    gctx.lineJoin = "round";
+    decorateCorners(gctx, S, RED, provenance);
+    drawFrame(gctx, S, RED);
+    const stems = connectBody(gctx, mask, S, RED);
+    provenance.push({ unit: DB.byId("meander"), score: 0.7, role: "外框边饰", placed: 1 });
+
+    /* 6. 合成 + 连通性校正（保证是一整片可剪的纸） */
+    bctx.drawImage(gapCv, 0, 0);
+    const checks = ensureConnected(bctx, S, RED, keep);
+
+    /* 7. 纸面 + 刀口 + 落影 */
+    const out = mk(S);
+    const octx = ctxOf(out);
+    paintPaper(octx, S);
+    octx.save();
+    octx.shadowColor = "rgba(52, 34, 22, 0.34)";
+    octx.shadowBlur = S * 0.014;
+    octx.shadowOffsetY = S * 0.004;
+    octx.drawImage(bodyCv, 0, 0);
+    octx.restore();
+    fiber(octx, S);
+
+    /* 8. 构图呼应度 */
+    const corp = correlation({ ink, body: mask, S, components: checks.components });
+
+    return {
+      canvas: out,
+      dataURL: out.toDataURL("image/png"),
+      provenance,
+      correlation: corp,
+      checks,
+      pixels: {
+        inkShare: inkCount / (S * S),
+        bodyShare: (norm.count || 0) / (S * S)
+      },
+      stats: {
+        inkPx: inkCount,
+        bodyPx: norm.count || 0,
+        holes: holeCount + rosette + ring.count,
+        ring: ring.count,
+        scallops: scallops,
+        mode: mode,
+        stems: stems,
+        components: checks.components,
+        bridged: checks.bridged,
+        innovation: innovation
+      }
     };
   }
 
